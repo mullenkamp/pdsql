@@ -2,9 +2,9 @@
 """
 Functions for importing mssql data.
 """
-from pandas import DataFrame, read_sql, to_datetime, Timestamp
-from numpy import arange
-from pdsql import create_eng, save_df
+import pandas as pd
+import numpy as np
+from pdsql.util import create_engine, save_df
 
 
 def rd_sql(server, database, table=None, col_names=None, where_col=None, where_val=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, export_path=None):
@@ -82,8 +82,8 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
             rename_cols.extend(['geometry'])
             df.columns = rename_cols
     else:
-        engine = create_eng('mssql', server, database)
-        df = read_sql(stmt1, engine)
+        engine = create_engine('mssql', server, database)
+        df = pd.read_sql(stmt1, engine)
         if rename_cols is not None:
             df.columns = rename_cols
 
@@ -159,7 +159,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
                                 where_lst=where_lst)
 
     ## Create connection to database
-    engine = create_eng('mssql', server, database)
+    engine = create_engine('mssql', server, database)
 
     ## Make minimum count selection
     if (min_count is not None) & isinstance(min_count, int) & (len(groupby_cols) == 1):
@@ -171,7 +171,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
             stmt1 = "SELECT " + cols_count_str + " FROM " + table + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(
                 min_count)
 
-        up_sites = read_sql(stmt1, engine)[groupby_cols[0]].tolist()
+        up_sites = pd.read_sql(stmt1, engine)[groupby_cols[0]].tolist()
         up_sites = [str(i) for i in up_sites]
 
         if not up_sites:
@@ -190,14 +190,14 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
                                     where_lst=where_lst)
 
     ## Create connection to database and execute sql statement
-    df = read_sql(sql_stmt1, engine)
+    df = pd.read_sql(sql_stmt1, engine)
 
     ## Check to see if any data was found
     if df.empty:
         raise ValueError('No data was found in the database for the parameters given.')
 
     ## set the index
-    df[date_col] = to_datetime(df[date_col])
+    df[date_col] = pd.to_datetime(df[date_col])
     groupby_cols.append(date_col)
     df1 = df.set_index(groupby_cols).sort_index()
 
@@ -271,10 +271,10 @@ def write_sql(df, server, database, table, dtype_dict, primary_keys=None, foreig
     for i in df.columns:
         dtype1 = dtype_dict[i]
         if (dtype1 == 'DATE') | (dtype1 == 'date'):
-            time1 = to_datetime(df[i]).dt.strftime('%Y-%m-%d')
+            time1 = pd.to_datetime(df[i]).dt.strftime('%Y-%m-%d')
             df1.loc[:, i] = time1
         elif (dtype1 == 'DATETIME') | (dtype1 == 'datetime'):
-            time1 = to_datetime(df[i]).dt.strftime('%Y-%m-%d %H:%M:%S')
+            time1 = pd.to_datetime(df[i]).dt.strftime('%Y-%m-%d %H:%M:%S')
             df1.loc[:, i] = time1
         elif ('VARCHAR' in dtype1) | ('varchar' in dtype1):
             try:
@@ -316,7 +316,7 @@ def write_sql(df, server, database, table, dtype_dict, primary_keys=None, foreig
     columns1 = str(tuple(df1.columns.tolist())).replace('\'', '')
     insert_stmt1 = "insert into " + table + " " + columns1 + " values "
 
-    engine = create_eng('mssql', server, database)
+    engine = create_engine('mssql', server, database)
     conn = engine.connect()
     stmt_dict = {}
 
@@ -382,7 +382,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     None
     """
     ### Prepare the engine
-    engine = create_eng('mssql', server, database)
+    engine = create_engine('mssql', server, database)
 
     ### Save to mssql table
     df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype)
@@ -416,7 +416,7 @@ def create_mssql_table(server, database, table, dtype_dict, primary_keys=None, f
     None
     """
     ### Make connection
-    engine = create_eng('mssql', server, database)
+    engine = create_engine('mssql', server, database)
     conn = engine.connect()
 
     ### Primary keys
@@ -454,7 +454,7 @@ def create_mssql_table(server, database, table, dtype_dict, primary_keys=None, f
             list1 = [i for i in conn]
             if list1:
                 print('Table already exists. Returning the table info.')
-                df = DataFrame(list1, columns=['columns', 'dtype'])
+                df = pd.DataFrame(list1, columns=['columns', 'dtype'])
                 conn.close()
                 return df
 
@@ -493,14 +493,14 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
     None
     """
     ### Make connection
-    engine = create_eng('mssql', server, database)
+    engine = create_engine('mssql', server, database)
     conn = engine.connect()
 
     ### Make the delete statement
     del_where_list = sql_where_stmts(**kwargs)
     if isinstance(stmt, str):
         del_rows_stmt = stmt
-    elif isinstance(pk_df, DataFrame):
+    elif isinstance(pk_df, pd.DataFrame):
         pk_df1 = pk_df.copy()
         d1 = pk_df1.dtypes.apply(lambda x: x.name)
         dt_bool = d1 == 'datetime64[ns]'
@@ -514,7 +514,7 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
         cols_str = str(tuple(cols)).replace('\'', '')
         tab_where = [table + '.' + i for i in cols]
         t1_where = ['t1.' + i for i in cols]
-        where_list = [t1_where[i] + ' = ' + tab_where[i] for i in arange(len(cols))]
+        where_list = [t1_where[i] + ' = ' + tab_where[i] for i in np.arange(len(cols))]
         where_stmt = " where " + " and ".join(where_list)
         exists_stmt = "(" + sel_t1 + cols_str + where_stmt + ")"
 
@@ -576,8 +576,8 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
         where_stmt = []
 
     if isinstance(from_date, str):
-        from_date1 = to_datetime(from_date, errors='coerce')
-        if isinstance(from_date1, Timestamp):
+        from_date1 = pd.to_datetime(from_date, errors='coerce')
+        if isinstance(from_date1, pd.Timestamp):
             from_date2 = str(from_date1)
             where_from_date = date_col + " >= " + from_date2.join(['\'', '\''])
         else:
@@ -586,8 +586,8 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
         where_from_date = ''
 
     if isinstance(to_date, str):
-        to_date1 = to_datetime(to_date, errors='coerce')
-        if isinstance(to_date1, Timestamp):
+        to_date1 = pd.to_datetime(to_date, errors='coerce')
+        if isinstance(to_date1, pd.Timestamp):
             to_date2 = str(to_date1)
             where_to_date = date_col + " <= " + to_date2.join(['\'', '\''])
         else:
@@ -729,12 +729,12 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     from pycrs.parser import from_epsg_code
 
     ## Create connection to database
-    engine = create_eng('mssql', server, database)
+    engine = create_engine('mssql', server, database)
 
     geo_col_stmt = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=" + "\'" + table + "\'" + " AND DATA_TYPE='geometry'"
-    geo_col = str(read_sql(geo_col_stmt, engine).iloc[0, 0])
+    geo_col = str(pd.read_sql(geo_col_stmt, engine).iloc[0, 0])
     geo_srid_stmt = "select distinct " + geo_col + ".STSrid from " + table
-    geo_srid = int(read_sql(geo_srid_stmt, engine).iloc[0, 0])
+    geo_srid = int(pd.read_sql(geo_srid_stmt, engine).iloc[0, 0])
     if where_lst is not None:
         if len(where_lst) > 0:
             stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table + " where " + " and ".join(
@@ -743,65 +743,9 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
             stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
     else:
         stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
-    df2 = read_sql(stmt2, engine)
+    df2 = pd.read_sql(stmt2, engine)
     geo = [loads(x) for x in df2.geometry]
     proj4 = from_epsg_code(geo_srid).to_proj4()
     geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=proj4)
 
     return geo_df
-
-
-#def mssql_logging(log, process):
-#    """
-#    Function to log to ECan's mssql database logger.
-#
-#    Parameters
-#    ----------
-#    log: str
-#        Log string.
-#    process: str
-#        The application process.
-#
-#    Returns
-#    -------
-#    None
-#    """
-#    server = 'SQL2014DEV01'
-#    database = 'Ecan_logger'
-#    table = 'Log'
-#
-#    insert_stmt1 = "insert into " + table + "(Date, Application, Thread, Level, Logger, Message) values "
-#    dt1 = datetime.now().strftime('%Y-%m-%d %H:%M')
-#
-#    conn = connect(server, database=database)
-#    cursor = conn.cursor()
-#
-#    log1 = log.replace('\n', ' ').replace('\'', '')
-#    rows = "(" + ", ".join([dt1, process, '1', "INFO", "Python", log1]) + ")"
-#    insert_stmt2 = insert_stmt1 + rows
-#    cursor.execute(insert_stmt2)
-#
-#    conn.commit()
-#
-#    #### Close everything!
-#    cursor.close()
-#    conn.close()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#########################################################
-## Archive
-
-

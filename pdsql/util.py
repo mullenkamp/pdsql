@@ -2,11 +2,11 @@
 """
 Utility functions for +other SQL modules.
 """
-from os import path
-from sqlalchemy import create_engine
+import os
+import sqlalchemy
 
 
-def create_eng(db_type, server, database, username=None, password=None):
+def create_engine(db_type, server, database, username=None, password=None):
     """
     Function to create an sqlalchemy engine.
 
@@ -42,29 +42,29 @@ def create_eng(db_type, server, database, username=None, password=None):
         try:
             import pymssql
             eng_str = 'mssql+pymssql://' + up + server + '/' + database
-            engine = create_engine(eng_str)
+            engine = sqlalchemy.create_engine(eng_str)
         except ImportError:
             driver1 = '?driver=ODBC+Driver+13+for+SQL+Server'
             eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
-            engine = create_engine(eng_str)
+            engine = sqlalchemy.create_engine(eng_str)
             try:
                 engine.connect()
             except:
                 driver2 = '?driver=ODBC+Driver+11+for+SQL+Server'
                 eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
-                engine = create_engine(eng_str)
+                engine = sqlalchemy.create_engine(eng_str)
                 engine.connect()
     elif db_type == 'postgresql':
         eng_str = 'postgresql://' + up + server + '/' + database
-        engine = create_engine(eng_str)
+        engine = sqlalchemy.create_engine(eng_str)
     elif db_type == 'oracle':
         eng_str = 'oracle://' + up + server + '/' + database
-        engine = create_engine(eng_str)
+        engine = sqlalchemy.create_engine(eng_str)
     elif db_type == 'mysql':
         eng_str = 'mysql+mysqldb://' + up + server + '/' + database
-        engine = create_engine(eng_str)
+        engine = sqlalchemy.create_engine(eng_str)
     elif db_type == 'sqlite':
-        engine = create_engine('sqlite:///:memory:')
+        engine = sqlalchemy.create_engine('sqlite:///:memory:')
 
     return engine
 
@@ -78,7 +78,7 @@ def save_df(df, path_str, index=True, header=True):
     index -- Should the row index be saved? Only necessary for csv.
     """
 
-    path1 = path.splitext(path_str)
+    path1 = os.path.splitext(os.path_str)
 
     if path1[1] in '.h5':
         df.to_hdf(path_str, 'df', mode='w')
