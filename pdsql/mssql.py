@@ -737,8 +737,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     geo_srid = int(pd.read_sql(geo_srid_stmt, engine).iloc[0, 0])
     if where_lst is not None:
         if len(where_lst) > 0:
-            stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table + " where " + " and ".join(
-                where_lst)
+            stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table + " where " + " and ".join(where_lst)
         else:
             stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
     else:

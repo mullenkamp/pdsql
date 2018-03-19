@@ -1,30 +1,16 @@
+pdsql - A Python package for Pandas/SQL
+========================================
 
-Welcome to ECan's Freshwater Reports
-===========================================
+The pdsql package contains convenience functions for adding, manipulating, and changing data in SQL servers with a emphasis on Pandas DataFrames for the handling of data in Python.
 
-Maps of Canterbury illustrating the relative wetness or dryness for precipitation, surface water, and groundwater are generated monthly. This documentation presents these maps and the associated seasonal reports. The intended audience for the maps and the associated reports are the Environment Canterbury Councillors.
+At the moment, the only supported SQL system is MSSQL, but other SQL systems can/will be added in the future. Priority will be given to PostgreSQL and SQLite/Spatialite.
 
-NIWA seasonal climate outlook
--------------------------------
-NIWA produces seasonal forecasts, which can be found on `NIWA's website <https://www.niwa.co.nz/climate/seasonal-climate-outlook/seasonal-climate-outlook-march-may-2018>`_.
-
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Summer-Autumn 2018
-
-   Summer-Autumn-2018-precip-sw
-   Summer-Autumn-2018-gw
+create_engine
+--------------
+The create_engine function is used to create an appropriate database engine through Sqlalchemy to interact with SQL databases.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Spring-Summer 2017-18
+   :caption: MSSQL
 
-   Spring-Summer-2017-18-precip-sw
-   Spring-Summer-2017-18-gw
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Methodology
-
-   methods-maps
+   mssql
