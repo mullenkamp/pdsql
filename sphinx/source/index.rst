@@ -11,6 +11,6 @@ The create_engine function is used to create an appropriate database engine thro
 
 .. toctree::
    :maxdepth: 2
-   :caption: MSSQL
+   :caption: Modules
 
    mssql
