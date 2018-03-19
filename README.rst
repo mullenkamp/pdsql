@@ -7,7 +7,7 @@ At the moment, the only supported SQL system is MSSQL, but other SQL systems can
 
 Documentation
 --------------
-The primary documentation for the package can be found here.
+The primary documentation for the package can be found `here <http://pdsql.readthedocs.io>`_.
 
 Installation
 ------------
