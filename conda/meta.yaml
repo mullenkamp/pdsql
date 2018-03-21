@@ -48,6 +48,6 @@ about:
   home: https://github.com/mullenkamp/pdsql
   license: Apache License 2.0
   license_family: APACHE
-  summary: Functions to extract data from Hilltop
+  summary: Python/SQL Functions
   doc_url: ''
   dev_url: ''

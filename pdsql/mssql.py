@@ -451,12 +451,12 @@ def create_mssql_table(server, database, table, dtype_dict, primary_keys=None, f
             check_tab_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=" +  str([str(table)])[1:-1]
 #            tab1 = read_sql(check_tab_stmt, conn)
             conn.execute(check_tab_stmt)
-            list1 = [i for i in conn]
-            if list1:
-                print('Table already exists. Returning the table info.')
-                df = pd.DataFrame(list1, columns=['columns', 'dtype'])
-                conn.close()
-                return df
+#            list1 = [i for i in conn]
+#            if list1:
+#                print('Table already exists. Returning the table info.')
+#                df = pd.DataFrame(list1, columns=['columns', 'dtype'])
+#                conn.close()
+#                return df
 
         ### Create table in database
         conn.execute(tab_create_stmt)
