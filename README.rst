@@ -22,3 +22,9 @@ or::
 The core dependencies are Pandas, Sqlalchemy, and pyodbc.
 
 Geometry data types in SQL are supported, but GeoPandas and pycrs must also be installed.
+
+To do
+-----
+- More documentation
+- Unit tests
+- Support for other SQL database programs (e.g. PostgreSQL and SQLite)
