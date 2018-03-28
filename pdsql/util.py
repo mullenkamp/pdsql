@@ -43,7 +43,7 @@ def create_engine(db_type, server, database, username=None, password=None):
             import pymssql
             eng_str = 'mssql+pymssql://' + up + server + '/' + database
             engine = sqlalchemy.create_engine(eng_str)
-        except ImportError:
+        except:
             driver1 = '?driver=ODBC+Driver+13+for+SQL+Server'
             eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
             engine = sqlalchemy.create_engine(eng_str)
