@@ -208,156 +208,6 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     return df1
 
 
-def write_sql(df, server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, create_table=True, drop_table=False, del_rows_dict=None, output_stmt=False):
-    """
-    Function to write pandas dataframes to mssql server tables. Must have write permissions to database!
-
-    Parameters
-    ----------
-    df : DataFrame
-        DataFrame to be saved.
-    server : str
-        The server name. e.g.: 'SQL2012PROD03'
-    database : str
-        The specific database within the server. e.g.: 'LowFlows'
-    table : str
-        The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    dtype_dict : dict of str
-        Dictionary of df columns to the associated sql data type. Examples below.
-    primary_keys : str or list of str
-        Index columns to define uniqueness in the data structure.
-    foreign_keys : str or list of str
-        Columns to link to another table in the same database.
-    foreign_table: str
-        The table in the same database with the identical foreign key(s).
-    create_table : bool
-        Should a new table be created or should it be appended to an existing table?
-    drop_table : bool
-        If the table already exists, should it be dropped?
-    output_stmt : bool
-        Should the SQL statements be outputted to a dictionary?
-
-    Returns
-    -------
-    if output_stmt is True then dict else None
-
-    dtype strings for matching python data types to SQL
-    ---------------------------------------------------
-    str: 'VARCHAR(19)'
-
-    date: 'DATE'
-
-    datetime: "DATETIME'
-
-    float: 'NUMERIC(10, 1)' or 'FLOAT'
-
-    int: 'INT'
-    """
-
-    #### Parameters and functions
-    py_sql = {'NUMERIC': float, 'DATE': str, 'DATETIME': str, 'INT': 'int32', 'smallint': 'int32', 'date': str, 'varchar': str, 'float': float, 'datetime': str, 'VARCHAR': str, 'FLOAT': float, 'smalldatetime': str, 'decimal': float, 'numeric': float, 'int': 'int32'}
-
-    def chunker(seq, size):
-        return ([seq[pos:pos + size] for pos in range(0, len(seq), size)])
-
-    #### Make sure the df has the correct dtypes
-    if len(dtype_dict) != len(df.columns):
-        raise ValueError('dtype_dict must have the same number of keys as columns in df.')
-    if not all(df.columns.isin(dtype_dict.keys())):
-        raise ValueError('dtype_dict must have the same column names as the columns in the df.')
-
-    df1 = df.copy()
-
-    for i in df.columns:
-        dtype1 = dtype_dict[i]
-        if (dtype1 == 'DATE') | (dtype1 == 'date'):
-            time1 = pd.to_datetime(df[i]).dt.strftime('%Y-%m-%d')
-            df1.loc[:, i] = time1
-        elif (dtype1 == 'DATETIME') | (dtype1 == 'datetime'):
-            time1 = pd.to_datetime(df[i]).dt.strftime('%Y-%m-%d %H:%M:%S')
-            df1.loc[:, i] = time1
-        elif ('VARCHAR' in dtype1) | ('varchar' in dtype1):
-            try:
-                df1.loc[:, i] = df.loc[:, i].astype(str).str.replace('\'', '')
-            except:
-                df1.loc[:, i] = df.loc[:, i].str.encode('utf-8', 'ignore').decode().str.replace('\'', '')
-        elif ('NUMERIC' in dtype1) | ('numeric' in dtype1) | ('decimal' in dtype1):
-            df1.loc[:, i] = df.loc[:, i].astype(float)
-        elif not dtype1 in py_sql.keys():
-            raise ValueError('dtype must be one of ' + str(py_sql.keys()))
-        else:
-            df1.loc[:, i] = df.loc[:, i].astype(py_sql[dtype1])
-
-    #### Convert df to set of tuples to be ingested by sql
-    list1 = df1.values.tolist()
-    tup1 = [str(tuple(i)) for i in list1]
-    tup2 = chunker(tup1, 1000)
-
-    #### Primary keys
-    if isinstance(primary_keys, str):
-        primary_keys = [primary_keys]
-    if isinstance(primary_keys, list):
-        key_stmt = ", Primary key (" + ", ".join(primary_keys) + ")"
-    else:
-        key_stmt = ""
-
-    #### Foreign keys
-    if isinstance(foreign_keys, str):
-        foreign_keys = [foreign_keys]
-    if isinstance(foreign_keys, list):
-        fkey_stmt = ", Foreign key (" + ", ".join(foreign_keys) + ") " + "References " + foreign_table + "(" + ", ".join(foreign_keys) + ")"
-    else:
-        fkey_stmt = ""
-
-    #### Initial create table and insert statements
-    d1 = [str(i) + ' ' + dtype_dict[i] for i in df.columns]
-    d2 = ', '.join(d1)
-    tab_create_stmt = "create table " + table + " (" + d2 + key_stmt + fkey_stmt + ")"
-    columns1 = str(tuple(df1.columns.tolist())).replace('\'', '')
-    insert_stmt1 = "insert into " + table + " " + columns1 + " values "
-
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
-    stmt_dict = {}
-
-    trans = conn.begin()
-    try:
-
-        #### Drop table if it exists
-        if drop_table:
-            drop_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL DROP TABLE " + table
-            conn.execute(drop_stmt)
-            stmt_dict.update({'drop_stmt': drop_stmt})
-
-        #### Create table in database
-        if create_table:
-            conn.execute(tab_create_stmt)
-            stmt_dict.update({'tab_create_stmt': tab_create_stmt})
-
-        #### Delete rows
-        if isinstance(del_rows_dict, dict):
-            del_where_list = sql_where_stmts(**del_rows_dict)
-            del_rows_stmt = "DELETE FROM " + table + " WHERE " + " AND ".join(del_where_list)
-            conn.execute(del_rows_stmt)
-
-        #### Insert data into table
-        for i in range(len(tup2)):
-            rows = ",".join(tup2[i])
-            insert_stmt2 = insert_stmt1 + rows
-            conn.execute(insert_stmt2)
-            stmt_dict.update({'insert' + str(i+1): insert_stmt2})
-
-        trans.commit()
-        conn.close()
-
-        if output_stmt:
-            return stmt_dict
-    except Exception as err:
-        trans.rollback()
-        conn.close()
-        raise err
-
-
 def to_mssql(df, server, database, table, index=False, dtype=None):
     """
     Function to append a DataFrame onto an existing mssql table.
@@ -491,6 +341,10 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
     Returns
     -------
     None
+
+    Notes
+    -----
+    Using the pk_df is the only way to ensure that specific rows will be deleted from composite keys. The column data types and names of pk_df must match the equivelant columns in the SQL table. The procedure creates a temporary table from the pk_df then deletes the rows in the target table based on the temp table. Then finally deletes the temp table.
     """
     ### Make connection
     engine = create_engine('mssql', server, database)
@@ -501,23 +355,14 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
     if isinstance(stmt, str):
         del_rows_stmt = stmt
     elif isinstance(pk_df, pd.DataFrame):
-        pk_df1 = pk_df.copy()
-        d1 = pk_df1.dtypes.apply(lambda x: x.name)
-        dt_bool = d1 == 'datetime64[ns]'
-        if any(dt_bool):
-            pk_df1.loc[:, dt_bool] = pk_df1.loc[:, dt_bool].astype(str)
-        l1 = pk_df1.values.tolist()
-        l2 = [tuple(i) for i in l1]
-        val_str = str(l2)[1:-1]
-        sel_t1 = "select * from (values " + val_str + ") as t1 "
-        cols = pk_df1.columns.tolist()
-        cols_str = str(tuple(cols)).replace('\'', '')
+        to_mssql(pk_df, server, database, 'temp_pk_table')
+        sel_t1 = "select * from temp_pk_table"
+        cols = pk_df.columns.tolist()
         tab_where = [table + '.' + i for i in cols]
-        t1_where = ['t1.' + i for i in cols]
+        t1_where = ['temp_pk_table.' + i for i in cols]
         where_list = [t1_where[i] + ' = ' + tab_where[i] for i in np.arange(len(cols))]
         where_stmt = " where " + " and ".join(where_list)
-        exists_stmt = "(" + sel_t1 + cols_str + where_stmt + ")"
-
+        exists_stmt = "(" + sel_t1 + where_stmt + ")"
         del_rows_stmt = "DELETE FROM " + table + " where exists " + exists_stmt
     elif isinstance(del_where_list, list):
         del_rows_stmt = "DELETE FROM " + table + " WHERE " + " AND ".join(del_where_list)
@@ -528,9 +373,11 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
     trans = conn.begin()
     try:
         conn.execute(del_rows_stmt)
+        conn.execute("IF OBJECT_ID('temp_pk_table', 'U') IS NOT NULL drop table temp_pk_table")
         trans.commit()
         conn.close()
     except Exception as err:
+        conn.execute("IF OBJECT_ID('temp_pk_table', 'U') IS NOT NULL drop table temp_pk_table")
         trans.rollback()
         conn.close()
         raise err
