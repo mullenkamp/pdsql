@@ -53,6 +53,7 @@ extensions = [
     'sphinx.ext.ifconfig',
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
+    'sphinx.ext.autosummary',
 	#'rst2pdf.pdfbuilder',
 
     # IPython console
