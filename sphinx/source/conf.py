@@ -64,6 +64,8 @@ extensions = [
     #'sphinxcontrib.googleanalytics',
 ]
 
+autosummary_generate = True
+
 # index - master document
 # rst2pdf - name of the generated pdf
 # Sample rst2pdf doc - title of the pdf
