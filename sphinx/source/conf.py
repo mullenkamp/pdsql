@@ -54,7 +54,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx.ext.autosummary',
-    'sphinx_gallery.gen_gallery',
+    # 'sphinx_gallery.gen_gallery',
 	#'rst2pdf.pdfbuilder',
 
     # IPython console
@@ -68,17 +68,17 @@ extensions = [
 autosummary_generate = True
 
 # Sphinx gallery configuration
-sphinx_gallery_conf = {
-    'examples_dirs': ['../../examples'],
-    'filename_pattern': '^((?!sgskip).)*$',
-    'gallery_dirs': ['gallery'],
-    'doc_module': ('pdsql',),
-    'reference_url': {'matplotlib': 'http://matplotlib.org',
-                      'numpy': 'http://docs.scipy.org/doc/numpy/reference',
-                      'scipy': 'http://docs.scipy.org/doc/scipy/reference',
-                      'geopandas': None},
-    'backreferences_dir': 'reference'
-}
+# sphinx_gallery_conf = {
+#     'examples_dirs': ['../../examples'],
+#     'filename_pattern': '^((?!sgskip).)*$',
+#     'gallery_dirs': ['gallery'],
+#     'doc_module': ('pdsql',),
+#     'reference_url': {'matplotlib': 'http://matplotlib.org',
+#                       'numpy': 'http://docs.scipy.org/doc/numpy/reference',
+#                       'scipy': 'http://docs.scipy.org/doc/scipy/reference',
+#                       'geopandas': None},
+#     'backreferences_dir': 'reference'
+# }
 
 # index - master document
 # rst2pdf - name of the generated pdf
