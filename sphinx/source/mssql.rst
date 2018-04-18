@@ -8,26 +8,26 @@ The mssql module contains a variety of functions to interact with MSSQL database
 Reading tables
 --------------
 
-.. autoattribute:: pdsql.mssql.rd_sql
+.. autofunction:: pdsql.mssql.rd_sql
 
 .. autofunction:: pdsql.mssql.rd_sql_ts
 
-.. automethod:: pdsql.mssql.rd_sql_geo
+.. autofunction:: pdsql.mssql.rd_sql_geo
 
 Creating tables
 ---------------
 
-.. automethod:: pdsql.mssql.create_mssql_table
+.. autofunction:: pdsql.mssql.create_mssql_table
 
 Writing to tables
 -----------------
 
-.. automethod:: pdsql.mssql.to_mssql
+.. autofunction:: pdsql.mssql.to_mssql
 
 Delete rows in tables
 ---------------------
 
-.. automethod:: pdsql.mssql.del_mssql_table_rows
+.. autofunction:: pdsql.mssql.del_mssql_table_rows
 
 
 API Pages
