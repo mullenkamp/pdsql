@@ -6,6 +6,11 @@ from os import path
 
 here = path.abspath(path.dirname(__file__))
 
+if os.environ.get('READTHEDOCS', False) == 'True':
+    INSTALL_REQUIRES = []
+else:
+    INSTALL_REQUIRES = ['pandas', 'sqlalchemy', 'pyodbc']
+
 # Get the long description from the README file
 with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
@@ -116,7 +121,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/en/latest/requirements.html
-    install_requires=['pandas', 'sqlalchemy', 'pyodbc'],  # Optional
+    install_requires=INSTALL_REQUIRES,  # Optional
 
     # List additional groups of dependencies here (e.g. development
     # dependencies). Users will be able to install these using the "extras"
