@@ -24,7 +24,7 @@ Writing to tables
 
 .. autofunction:: pdsql.mssql.to_mssql
 
-Delete rows in tables
+Deleting rows in tables
 ---------------------
 
 .. autofunction:: pdsql.mssql.del_mssql_table_rows
