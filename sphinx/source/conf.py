@@ -19,6 +19,7 @@
 #
 import os
 import sys
+import pdsql
 
 project_name = 'pdsql'
 
