@@ -55,6 +55,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx.ext.githubpages',
     'sphinx.ext.autosummary',
+    'sphinx.ext.napoleon',
     # 'sphinx_gallery.gen_gallery',
 	#'rst2pdf.pdfbuilder',
 
