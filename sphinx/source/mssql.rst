@@ -8,7 +8,7 @@ The mssql module contains a variety of functions to interact with MSSQL database
 Reading tables
 --------------
 
-.. automethod:: pdsql.mssql.rd_sql
+.. autoattribute:: pdsql.mssql.rd_sql
 
 .. automethod:: pdsql.mssql.rd_sql_ts
 
