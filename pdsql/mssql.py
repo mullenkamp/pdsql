@@ -9,7 +9,7 @@ from pdsql.util import create_engine, save_df
 
 def rd_sql(server, database, table=None, col_names=None, where_col=None, where_val=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, export_path=None):
     """
-    Function to import data from an MSSQL database. Requires the pymssql package.
+    Function to import data from an MSSQL database.
 
     Parameters
     ----------
@@ -98,7 +98,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
               val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None,
               export_path=None):
     """
-    Function to specifically read and possibly aggregate time series data stored in MSSQL tables. Returns a MultiIndex DataFrame.
+    Function to specifically read and possibly aggregate time series data stored in MSSQL tables.
 
     Parameters
     ----------
