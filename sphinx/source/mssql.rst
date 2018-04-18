@@ -10,7 +10,7 @@ Reading tables
 
 .. autoattribute:: pdsql.mssql.rd_sql
 
-.. automethod:: pdsql.mssql.rd_sql_ts
+.. autofunction:: pdsql.mssql.rd_sql_ts
 
 .. automethod:: pdsql.mssql.rd_sql_geo
 
