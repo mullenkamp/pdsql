@@ -215,7 +215,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     Parameters
     ----------
     df : DataFrame
-        DataFrame to be saved.
+        DataFrame to be saved. The DataFrame column/index names must match those on the mssql table exactly.
     server : str
         The server name. e.g.: 'SQL2012PROD03'
     database : str
@@ -225,7 +225,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     index : bool
         Should the index be added as a column?
     dtype : dict of column name to SQL type, default None
-        Optional specifying the datatype for columns. The SQL type should be a SQLAlchemy type.
+        Optional specifying the datatype for columns. The SQL type should be an SQLAlchemy type.
 
     Returns
     -------
@@ -541,7 +541,7 @@ def site_stat_stmt(table, site_col, values_col, fun):
 
 def sql_del_rows_stmt(table, **kwargs):
     """
-    Function to create an sql statement to row rows based on where statements.
+    Function to create an sql statement to delete rows based on where statements.
     """
 
     where_list = sql_where_stmts(**kwargs)

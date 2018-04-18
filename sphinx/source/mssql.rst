@@ -27,6 +27,13 @@ Deleting rows in tables
 
 .. autofunction:: pdsql.mssql.del_mssql_table_rows
 
+Helper functions
+----------------
+
+.. autofunction:: pdsql.mssql.sql_where_stmts
+
+.. autofunction:: pdsql.mssql.sql_ts_agg_stmt
+
 
 API Pages
 ---------
