@@ -383,6 +383,65 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
         raise err
 
 
+def update_mssql_table_rows(df, server, database, table, on, append=True):
+    """
+    Function to selectively delete rows from an mssql table.
+
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame with data to be overwritten in SQL table.
+    server : str
+        The server name. e.g.: 'SQL2012PROD03'
+    database : str
+        The specific database within the server. e.g.: 'LowFlows'
+    table : str
+        The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
+    on : str or list
+        The columns for the df and sql table to join to to make the update.
+    stmt : str
+        SQL delete statement. Will override everything except server and database.
+
+    Returns
+    -------
+    None
+    """
+    ### Make connection
+    engine = create_engine('mssql', server, database)
+    conn = engine.connect()
+
+    ### Make the update statement
+    temp_tab = 'temp_up_table'
+    to_mssql(df, server, database, temp_tab)
+    if isinstance(on, str):
+        on = [on]
+    on_tab = [table + '.' + i for i in on]
+    on_temp = [temp_tab + '.' + i for i in on]
+    cols = df.columns.tolist()
+    val_cols = [i for i in cols if not i in on]
+    tab_list = [table + '.' + i for i in val_cols]
+    temp_list = [temp_tab + '.' + i for i in val_cols]
+    temp_list2 = [temp_tab + '.' + i for i in cols]
+    up_list = [tab_list[i] + ' = ' + temp_list[i] for i in np.arange(len(temp_list))]
+    on_list = [on_tab[i] + ' = ' + on_temp[i] for i in np.arange(len(on))]
+    up_stmt = "update " + table + " set " + ", ".join(up_list) + " from " + table + " inner join " + temp_tab + " on " + ", ".join(on_list)
+    if append:
+        up_stmt = "merge " + table + " using " + temp_tab + " on (" + ", ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  " WHEN NOT MATCHED BY TARGET THEN INSERT (" + ", ".join(cols) + ") values (" + ", ".join(temp_list2) + ");"
+
+    ### Delete rows
+    trans = conn.begin()
+    try:
+        conn.execute(up_stmt)
+        conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
+        trans.commit()
+        conn.close()
+    except Exception as err:
+        conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
+        trans.rollback()
+        conn.close()
+        raise err
+
+
 def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, date_col=None):
     """
     Function to take various input parameters and convert them to a list of where statements for SQL.
