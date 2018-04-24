@@ -22,6 +22,11 @@ Writing to tables
 
 .. autofunction:: pdsql.mssql.to_mssql
 
+Updating tables
+---------------
+
+.. autofunction:: pdsql.mssql.update_mssql_table_rows
+
 Deleting rows in tables
 ---------------------
 
