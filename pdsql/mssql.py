@@ -410,8 +410,13 @@ def update_mssql_table_rows(df, server, database, table, on, append=True):
     engine = create_engine('mssql', server, database)
     conn = engine.connect()
 
-    ### Make the update statement
+    ### Remove temp table if it exists
     temp_tab = 'temp_up_table'
+    trans = conn.begin()
+    conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
+    trans.commit()
+
+    ### Make the update statement
     to_mssql(df, server, database, temp_tab)
     if isinstance(on, str):
         on = [on]
@@ -426,7 +431,7 @@ def update_mssql_table_rows(df, server, database, table, on, append=True):
     on_list = [on_tab[i] + ' = ' + on_temp[i] for i in np.arange(len(on))]
     up_stmt = "update " + table + " set " + ", ".join(up_list) + " from " + table + " inner join " + temp_tab + " on " + ", ".join(on_list)
     if append:
-        up_stmt = "merge " + table + " using " + temp_tab + " on (" + ", ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  " WHEN NOT MATCHED BY TARGET THEN INSERT (" + ", ".join(cols) + ") values (" + ", ".join(temp_list2) + ");"
+        up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  " WHEN NOT MATCHED BY TARGET THEN INSERT (" + ", ".join(cols) + ") values (" + ", ".join(temp_list2) + ");"
 
     ### Delete rows
     trans = conn.begin()
