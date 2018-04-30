@@ -399,8 +399,8 @@ def update_mssql_table_rows(df, server, database, table, on, append=True):
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
     on : str or list
         The columns for the df and sql table to join to to make the update.
-    stmt : str
-        SQL delete statement. Will override everything except server and database.
+    append : bool
+        Should new sites be appended to the table?
 
     Returns
     -------
@@ -429,9 +429,11 @@ def update_mssql_table_rows(df, server, database, table, on, append=True):
     temp_list2 = [temp_tab + '.' + i for i in cols]
     up_list = [tab_list[i] + ' = ' + temp_list[i] for i in np.arange(len(temp_list))]
     on_list = [on_tab[i] + ' = ' + on_temp[i] for i in np.arange(len(on))]
-    up_stmt = "update " + table + " set " + ", ".join(up_list) + " from " + table + " inner join " + temp_tab + " on " + ", ".join(on_list)
+#    up_stmt = "update " + table + " set " + ", ".join(up_list) + " from " + table + " inner join " + temp_tab + " on " + " and ".join(on_list)
     if append:
         up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  " WHEN NOT MATCHED BY TARGET THEN INSERT (" + ", ".join(cols) + ") values (" + ", ".join(temp_list2) + ");"
+    else:
+        up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  ";"
 
     ### Delete rows
     trans = conn.begin()
