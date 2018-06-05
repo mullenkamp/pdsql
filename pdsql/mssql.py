@@ -411,10 +411,10 @@ def update_mssql_table_rows(df, server, database, table, on, append=True):
     conn = engine.connect()
 
     ### Remove temp table if it exists
-    temp_tab = 'temp_up_table'
-    trans = conn.begin()
-    conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
-    trans.commit()
+    temp_tab = '#temp_up_table'
+    # trans = conn.begin()
+    # conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
+    # trans.commit()
 
     ### Make the update statement
     to_mssql(df, server, database, temp_tab)
@@ -439,11 +439,9 @@ def update_mssql_table_rows(df, server, database, table, on, append=True):
     trans = conn.begin()
     try:
         conn.execute(up_stmt)
-        conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
         trans.commit()
         conn.close()
     except Exception as err:
-        conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
         trans.rollback()
         conn.close()
         raise err
