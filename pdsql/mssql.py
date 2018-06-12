@@ -4,6 +4,7 @@ Functions for importing mssql data.
 """
 import pandas as pd
 import numpy as np
+from datetime import datetime
 from pdsql.util import create_engine, save_df
 
 
@@ -238,7 +239,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype)
 
 
-def create_mssql_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False):
+def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False):
     """
     Function to create a table in an mssql database.
 
@@ -319,7 +320,7 @@ def create_mssql_table(server, database, table, dtype_dict, primary_keys=None, f
         raise err
 
 
-def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs):
+def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs):
     """
     Function to selectively delete rows from an mssql table.
 
@@ -383,9 +384,9 @@ def del_mssql_table_rows(server, database, table=None, pk_df=None, stmt=None, **
         raise err
 
 
-def update_mssql_table_rows(df, server, database, table, on, append=True):
+def update_table_rows(df, server, database, table, on, append=True):
     """
-    Function to selectively delete rows from an mssql table.
+    Function to update rows from an mssql table.
 
     Parameters
     ----------
@@ -661,3 +662,53 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=proj4)
 
     return geo_df
+
+
+def update_from_difference(df, server, database, table, on, append=True, mod_date_col=False, **kwargs):
+    """
+    Function to update rows from an mssql table from the difference between a DataFrame and the existing SQL table.
+
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame with data to be overwritten in SQL table.
+    server : str
+        The server name. e.g.: 'SQL2012PROD03'
+    database : str
+        The specific database within the server. e.g.: 'LowFlows'
+    table : str
+        The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
+    on : str or list
+        The columns for the df and sql table to join to to make the update.
+    append : bool
+        Should new sites be appended to the table?
+    mod_date_col : str or None
+        Name of the modification date column to be updated. None if it doesn't exist.
+    **kwargs
+        Other kwargs to be passed to rd_sql.
+
+    Returns
+    -------
+    None
+    """
+    if isinstance(df.index, pd.MultiIndex):
+        df1 = df.copy()
+    else:
+        df1 = df.set_index(on).copy()
+    old1 = rd_sql(server, database, table, **kwargs).set_index(on)[df1.columns]
+
+    comp_summ = pd.concat([old1, df1], axis=1, keys=['old', 'new'])
+    bool_summ = ((comp_summ['old'] != comp_summ['new']) & (comp_summ['new'].notnull() & comp_summ['new'].notnull())).any(axis=1)
+    if bool_summ.any():
+        new1 = comp_summ['new'].loc[bool_summ].reset_index()
+        if isinstance(mod_date_col, str):
+            run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+            new1[mod_date_col] = run_time_start
+
+        update_table_rows(new1, server, database, table, on=on, append=append)
+
+
+
+
+
+
