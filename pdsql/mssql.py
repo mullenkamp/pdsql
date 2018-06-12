@@ -689,7 +689,8 @@ def update_from_difference(df, server, database, table, on, append=True, mod_dat
 
     Returns
     -------
-    None
+    DataFrame
+        Of the results that were updated in SQL.
     """
     if isinstance(df.index, pd.MultiIndex):
         df1 = df.copy()
@@ -706,6 +707,10 @@ def update_from_difference(df, server, database, table, on, append=True, mod_dat
             new1[mod_date_col] = run_time_start
 
         update_table_rows(new1, server, database, table, on=on, append=append)
+        return new1
+    else:
+        return pd.DataFrame(columns=on).set_index(on)
+
 
 
 
