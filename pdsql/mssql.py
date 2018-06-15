@@ -658,8 +658,8 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
         stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
     df2 = pd.read_sql(stmt2, engine)
     geo = [loads(x) for x in df2.geometry]
-    proj4 = from_epsg_code(geo_srid).to_proj4()
-    geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=proj4)
+#    proj4 = from_epsg_code(geo_srid).to_proj4()
+    geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=geo_srid)
 
     return geo_df
 
