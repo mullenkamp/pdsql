@@ -640,7 +640,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     """
     from geopandas import GeoDataFrame
     from shapely.wkt import loads
-    from pycrs.parser import from_epsg_code
+    # from pycrs.parser import from_epsg_code
 
     ## Create connection to database
     engine = create_engine('mssql', server, database)
@@ -710,10 +710,3 @@ def update_from_difference(df, server, database, table, on, append=True, mod_dat
         return new1
     else:
         return pd.DataFrame(columns=on).set_index(on)
-
-
-
-
-
-
-
