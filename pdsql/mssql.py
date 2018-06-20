@@ -659,7 +659,8 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     df2 = pd.read_sql(stmt2, engine)
     geo = [loads(x) for x in df2.geometry]
 #    proj4 = from_epsg_code(geo_srid).to_proj4()
-    geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=geo_srid)
+    crs = {'init' :'epsg:' + str(geo_srid)}
+    geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=crs)
 
     return geo_df
 
