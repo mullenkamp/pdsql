@@ -6,7 +6,7 @@ The pdsql package contains convenience functions for adding, manipulating, and c
 At the moment, the only supported SQL system is MSSQL, but other SQL systems can/will be added in the future through the better implementation of Sqlalchemy. Priority will be given to PostgreSQL and SQLite/Spatialite.
 
 Installation
-=============
+------------
 
 ETo can be installed via pip or conda::
 
