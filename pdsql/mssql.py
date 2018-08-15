@@ -697,7 +697,10 @@ def update_from_difference(df, server, database, table, on, append=True, mod_dat
         df1 = df.copy()
     else:
         df1 = df.set_index(on).copy()
-    old1 = rd_sql(server, database, table, **kwargs).set_index(on)[df1.columns]
+    all_cols = on[:]
+    all_cols.extend(df1.columns)
+
+    old1 = rd_sql(server, database, table, all_cols).set_index(on)
 
     comp_summ = pd.concat([old1, df1], axis=1, keys=['old', 'new'])
     bool_summ = ((comp_summ['old'] != comp_summ['new']) & (comp_summ['new'].notnull() & comp_summ['new'].notnull())).any(axis=1)
