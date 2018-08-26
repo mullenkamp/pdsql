@@ -15,7 +15,7 @@ Reading tables
 Creating tables
 ---------------
 
-.. autofunction:: pdsql.mssql.create_mssql_table
+.. autofunction:: pdsql.mssql.create_table
 
 Writing to tables
 -----------------
@@ -25,12 +25,14 @@ Writing to tables
 Updating tables
 ---------------
 
-.. autofunction:: pdsql.mssql.update_mssql_table_rows
+.. autofunction:: pdsql.mssql.update_table_rows
+
+.. autofunction:: pdsql.mssql.update_from_difference
 
 Deleting rows in tables
 ---------------------
 
-.. autofunction:: pdsql.mssql.del_mssql_table_rows
+.. autofunction:: pdsql.mssql.del_table_rows
 
 Helper functions
 ----------------
