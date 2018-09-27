@@ -4,6 +4,7 @@ Functions for importing mssql data.
 """
 import pandas as pd
 import numpy as np
+import random
 from datetime import datetime
 from pdsql.util import create_engine, save_df
 
@@ -95,9 +96,7 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
     return df
 
 
-def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean',
-              val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None,
-              export_path=None):
+def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None, export_path=None):
     """
     Function to specifically read and possibly aggregate time series data stored in MSSQL tables.
 
@@ -145,8 +144,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     """
 
     ## Create where statement
-    where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date,
-                                to_date=to_date, date_col=date_col)
+    where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
     ## Create ts statement and append earlier where statement
     if isinstance(groupby_cols, str):
@@ -155,9 +153,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     col_stmt = ', '.join(col_names1)
 
     ## Create sql stmt
-    sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols,
-                                resample_code=resample_code, period=period, fun=fun, val_round=val_round,
-                                where_lst=where_lst)
+    sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
 
     ## Create connection to database
     engine = create_engine('mssql', server, database)
@@ -166,11 +162,9 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     if (min_count is not None) & isinstance(min_count, int) & (len(groupby_cols) == 1):
         cols_count_str = ', '.join([groupby_cols[0], 'count(' + values_cols + ') as count'])
         if isinstance(where_lst, list):
-            stmt1 = "SELECT " + cols_count_str + " FROM " + "(" + sql_stmt1 + ") as agg" + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(
-                min_count)
+            stmt1 = "SELECT " + cols_count_str + " FROM " + "(" + sql_stmt1 + ") as agg" + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(min_count)
         else:
-            stmt1 = "SELECT " + cols_count_str + " FROM " + table + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(
-                min_count)
+            stmt1 = "SELECT " + cols_count_str + " FROM " + table + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(min_count)
 
         up_sites = pd.read_sql(stmt1, engine)[groupby_cols[0]].tolist()
         up_sites = [str(i) for i in up_sites]
@@ -182,13 +176,10 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
             where_col = {where_col: where_val}
 
         where_col.update({groupby_cols[0]: up_sites})
-        where_lst = sql_where_stmts(where_col, where_op=where_op, from_date=from_date, to_date=to_date,
-                                    date_col=date_col)
+        where_lst = sql_where_stmts(where_col, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
         ## Create sql stmt
-        sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols,
-                                    resample_code=resample_code, period=period, fun=fun, val_round=val_round,
-                                    where_lst=where_lst)
+        sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
 
     ## Create connection to database and execute sql statement
     df = pd.read_sql(sql_stmt1, engine)
@@ -412,10 +403,10 @@ def update_table_rows(df, server, database, table, on, append=True):
     conn = engine.connect()
 
     ### Remove temp table if it exists
-    temp_tab = 'temp_up_table'
-    trans = conn.begin()
-    conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
-    trans.commit()
+    temp_tab = 'temp_up_table' + str(random.randint(1, 10000))
+#    trans = conn.begin()
+#    conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
+#    trans.commit()
 
     ### Make the update statement
 
@@ -544,7 +535,7 @@ def sql_ts_agg_stmt(table, groupby_cols, date_col, values_cols, resample_code, p
     Returns
     -------
     str
-        A full SQL statement that can be passed directly to an SQL connection driver like pymssql through pandas read_sql function.
+        A full SQL statement that can be passed directly to an SQL connection driver through pandas read_sql function.
     """
 
     if isinstance(groupby_cols, (str, list)):
