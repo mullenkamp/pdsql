@@ -63,8 +63,7 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         else:
             col_stmt = '*'
 
-        where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date,
-                                    to_date=to_date, date_col=date_col)
+        where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
         if isinstance(where_lst, list):
             stmt1 = "SELECT " + col_stmt + " FROM " + table + " where " + " and ".join(where_lst)
