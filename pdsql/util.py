@@ -44,25 +44,37 @@ def create_engine(db_type, server, database, username=None, password=None):
             eng_str = 'mssql+pymssql://' + up + server + '/' + database
             engine = sqlalchemy.create_engine(eng_str)
         except:
-            driver1 = '?driver=ODBC+Driver+13+for+SQL+Server'
+            driver1 = '?driver=ODBC+Driver+17+for+SQL+Server'
             eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
             engine = sqlalchemy.create_engine(eng_str)
             try:
                 engine.connect()
             except:
-                driver2 = '?driver=ODBC+Driver+11+for+SQL+Server'
-                eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
+                driver1 = '?driver=ODBC+Driver+13.1+for+SQL+Server'
+                eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
                 engine = sqlalchemy.create_engine(eng_str)
                 try:
                     engine.connect()
                 except:
-                    driver2 = '?driver=SQL+Server+Native+Client+11.0'
-                    eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
+                    driver1 = '?driver=ODBC+Driver+13+for+SQL+Server'
+                    eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
                     engine = sqlalchemy.create_engine(eng_str)
                     try:
                         engine.connect()
                     except:
-                        print('Install a proper ODBC mssql driver')
+                        driver2 = '?driver=ODBC+Driver+11+for+SQL+Server'
+                        eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
+                        engine = sqlalchemy.create_engine(eng_str)
+                        try:
+                            engine.connect()
+                        except:
+                            driver2 = '?driver=SQL+Server+Native+Client+11.0'
+                            eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
+                            engine = sqlalchemy.create_engine(eng_str)
+                            try:
+                                engine.connect()
+                            except:
+                                print('Install a proper ODBC mssql driver')
     elif db_type == 'postgresql':
         eng_str = 'postgresql://' + up + server + '/' + database
         engine = sqlalchemy.create_engine(eng_str)
