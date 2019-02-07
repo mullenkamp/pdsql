@@ -4,12 +4,11 @@ Functions for importing mssql data.
 """
 import pandas as pd
 import numpy as np
-import random
 from datetime import datetime
-from pdsql.util import create_engine, save_df
+from pdsql.util import create_engine, get_pk_stmt, compare_dfs
 
 
-def rd_sql(server, database, table=None, col_names=None, where_col=None, where_val=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, export_path=None):
+def rd_sql(server, database, table=None, col_names=None, where_col=None, where_val=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
     """
     Function to import data from an MSSQL database.
 
@@ -41,8 +40,8 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         List of strings to rename the resulting DataFrame column names.
     stmt : str
         Custom SQL statement to be directly passed to the database. This will ignore all prior arguments except server and database.
-    export_path : str
-        The export path for a csv file if desired. If None, then nothing is exported.
+    con : SQLAlchemy connectable (engine/connection) or database string URI
+        The sqlalchemy connection to be passed to pandas.read_sql
 
     Returns
     -------
@@ -83,19 +82,16 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
             rename_cols.extend(['geometry'])
             df.columns = rename_cols
     else:
-        engine = create_engine('mssql', server, database)
-        df = pd.read_sql(stmt1, engine)
+        if con is None:
+            con = create_engine('mssql', server, database)
+        df = pd.read_sql(stmt1, con=con)
         if rename_cols is not None:
             df.columns = rename_cols
-
-    ## save and return
-    if export_path is not None:
-        save_df(df, export_path, index=False)
 
     return df
 
 
-def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None, export_path=None):
+def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None, con=None):
     """
     Function to specifically read and possibly aggregate time series data stored in MSSQL tables.
 
@@ -133,8 +129,8 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
         The end date in the form '2010-01-01'.
     min_count : int
         The minimum number of values required to return groupby_cols. Only works when groupby_cols and vlue_cols are str.
-    export_path : str
-        The export path for a csv file if desired. If None, then nothing is exported.
+    con : SQLAlchemy connectable (engine/connection) or database string URI
+        The sqlalchemy connection to be passed to pandas.read_sql
 
     Returns
     -------
@@ -155,7 +151,8 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
 
     ## Create connection to database
-    engine = create_engine('mssql', server, database)
+    if con is None:
+        con = create_engine('mssql', server, database)
 
     ## Make minimum count selection
     if (min_count is not None) & isinstance(min_count, int) & (len(groupby_cols) == 1):
@@ -165,7 +162,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
         else:
             stmt1 = "SELECT " + cols_count_str + " FROM " + table + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(min_count)
 
-        up_sites = pd.read_sql(stmt1, engine)[groupby_cols[0]].tolist()
+        up_sites = pd.read_sql(stmt1, con)[groupby_cols[0]].tolist()
         up_sites = [str(i) for i in up_sites]
 
         if not up_sites:
@@ -181,7 +178,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
         sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
 
     ## Create connection to database and execute sql statement
-    df = pd.read_sql(sql_stmt1, engine)
+    df = pd.read_sql(sql_stmt1, con)
 
     ## Check to see if any data was found
     if df.empty:
@@ -191,10 +188,6 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     df[date_col] = pd.to_datetime(df[date_col])
     groupby_cols.append(date_col)
     df1 = df.set_index(groupby_cols).sort_index()
-
-    ## Save and return
-    if export_path is not None:
-        save_df(df1, export_path)
 
     return df1
 
@@ -229,7 +222,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype)
 
 
-def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False):
+def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False, con=None):
     """
     Function to create a table in an mssql database.
 
@@ -257,8 +250,9 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
     None
     """
     ### Make connection
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
+    if con is None:
+        engine = create_engine('mssql', server, database)
+        con = engine.connect()
 
     ### Primary keys
     if isinstance(primary_keys, str):
@@ -281,17 +275,17 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
     d2 = ', '.join(d1)
     tab_create_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NULL create table " + table + " (" + d2 + pkey_stmt + fkey_stmt + ")"
 
-    trans = conn.begin()
+    trans = con.begin()
     try:
 
         ### Drop table option or check
         if drop_table:
             drop_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL DROP TABLE " + table
-            conn.execute(drop_stmt)
+            con.execute(drop_stmt)
         else:
             check_tab_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=" +  str([str(table)])[1:-1]
 #            tab1 = read_sql(check_tab_stmt, conn)
-            conn.execute(check_tab_stmt)
+            con.execute(check_tab_stmt)
 #            list1 = [i for i in conn]
 #            if list1:
 #                print('Table already exists. Returning the table info.')
@@ -300,13 +294,13 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
 #                return df
 
         ### Create table in database
-        conn.execute(tab_create_stmt)
+        con.execute(tab_create_stmt)
         trans.commit()
-        conn.close()
+        con.close()
 
     except Exception as err:
         trans.rollback()
-        conn.close()
+        con.close()
         raise err
 
 
@@ -337,20 +331,27 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
     -----
     Using the pk_df is the only way to ensure that specific rows will be deleted from composite keys. The column data types and names of pk_df must match the equivelant columns in the SQL table. The procedure creates a temporary table from the pk_df then deletes the rows in the target table based on the temp table. Then finally deletes the temp table.
     """
-    ### Make connection
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
 
     ### Make the delete statement
     del_where_list = sql_where_stmts(**kwargs)
     if isinstance(stmt, str):
         del_rows_stmt = stmt
     elif isinstance(pk_df, pd.DataFrame):
-        to_mssql(pk_df, server, database, 'temp_pk_table')
-        sel_t1 = "select * from temp_pk_table"
+        temp_tab = '#temp_del_tab1'
+
+        ### Check the primary keys
+        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        pk = rd_sql(server, database, stmt=pk_stmt).name
+
+        if pk.empty:
+            raise ValueError('SQL table has no primary key. Please set one up.')
+        if not np.isin(pk, pk_df.columns.tolist()).all():
+            raise ValueError('The primary keys in the SQL table does not match up with the pk_df')
+
+        sel_t1 = "select * from " + temp_tab
         cols = pk_df.columns.tolist()
         tab_where = [table + '.' + i for i in cols]
-        t1_where = ['temp_pk_table.' + i for i in cols]
+        t1_where = [temp_tab + '.' + i for i in cols]
         where_list = [t1_where[i] + ' = ' + tab_where[i] for i in np.arange(len(cols))]
         where_stmt = " where " + " and ".join(where_list)
         exists_stmt = "(" + sel_t1 + where_stmt + ")"
@@ -361,22 +362,16 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
         del_rows_stmt = "DELETE FROM " + table
 
     ### Delete rows
-    trans = conn.begin()
-    try:
+    engine = create_engine('mssql', server, database)
+    with engine.begin() as conn:
+        if isinstance(pk_df, pd.DataFrame):
+            pk_df.to_sql(name=temp_tab, con=conn, if_exists='replace', chunksize=1000)
         conn.execute(del_rows_stmt)
-        conn.execute("IF OBJECT_ID('temp_pk_table', 'U') IS NOT NULL drop table temp_pk_table")
-        trans.commit()
-        conn.close()
-    except Exception as err:
-        conn.execute("IF OBJECT_ID('temp_pk_table', 'U') IS NOT NULL drop table temp_pk_table")
-        trans.rollback()
-        conn.close()
-        raise err
 
 
-def update_table_rows(df, server, database, table, on, append=True):
+def update_table_rows(df, server, database, table, on=None, index=False, append=True):
     """
-    Function to update rows from an mssql table.
+    Function to update rows from an mssql table. SQL table must have a primary key and the primary key must be in the input DataFrame.
 
     Parameters
     ----------
@@ -388,8 +383,10 @@ def update_table_rows(df, server, database, table, on, append=True):
         The specific database within the server. e.g.: 'LowFlows'
     table : str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    on : str or list
-        The columns for the df and sql table to join to to make the update.
+    on : None or list of str
+        The index by which the update should be applied on. If None, then it uses the existing primary key(s).
+    index : bool
+        Does the df have an index that corresponds to the SQL table primary keys?
     append : bool
         Should new sites be appended to the table?
 
@@ -397,21 +394,17 @@ def update_table_rows(df, server, database, table, on, append=True):
     -------
     None
     """
-    ### Make connection
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
+    ### Check the primary keys
+    if on is None:
+        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
 
-    ### Remove temp table if it exists
-    temp_tab = 'temp_up_table' + str(random.randint(1, 10000))
-#    trans = conn.begin()
-#    conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
-#    trans.commit()
+        if not pk:
+            raise ValueError('SQL table has no primary key. Please set one up.')
+        on = pk
 
     ### Make the update statement
-
-    to_mssql(df, server, database, temp_tab)
-    if isinstance(on, str):
-        on = [on]
+    temp_tab = '#temp_up1'
     on_tab = [table + '.' + i for i in on]
     on_temp = [temp_tab + '.' + i for i in on]
     cols = df.columns.tolist()
@@ -427,17 +420,11 @@ def update_table_rows(df, server, database, table, on, append=True):
     else:
         up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  ";"
 
-    ### Delete rows
-    trans = conn.begin()
-    try:
+    ### Run SQL code to update rows
+    engine = create_engine('mssql', server, database)
+    with engine.begin() as conn:
+        df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000)
         conn.execute(up_stmt)
-        conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
-        trans.commit()
-        conn.close()
-    except Exception as err:
-        trans.rollback()
-        conn.close()
-        raise err
 
 
 def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, date_col=None):
@@ -655,7 +642,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     return geo_df
 
 
-def update_from_difference(df, server, database, table, on, append=True, mod_date_col=False, **kwargs):
+def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False):
     """
     Function to update rows from an mssql table from the difference between a DataFrame and the existing SQL table.
 
@@ -669,38 +656,55 @@ def update_from_difference(df, server, database, table, on, append=True, mod_dat
         The specific database within the server. e.g.: 'LowFlows'
     table : str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    on : str or list
-        The columns for the df and sql table to join to to make the update.
+    on : None or list of str
+        The index by which the update should be applied on. If None, then it uses the existing primary key(s).
+    index : bool
+        Does the df have an index that corresponds to the SQL table primary keys?
     append : bool
         Should new sites be appended to the table?
     mod_date_col : str or None
         Name of the modification date column to be updated. None if it doesn't exist.
-    **kwargs
-        Other kwargs to be passed to rd_sql.
 
     Returns
     -------
     DataFrame
         Of the results that were updated in SQL.
     """
-    if isinstance(df.index, pd.MultiIndex):
-        df1 = df.copy()
+    ### Check the primary keys
+    if on is None:
+        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
+
+        if not pk:
+            raise ValueError('SQL table has no primary key. Please set one up.')
     else:
-        df1 = df.set_index(on).copy()
-    all_cols = on[:]
-    all_cols.extend(df1.columns)
+        pk = on
 
-    old1 = rd_sql(server, database, table, all_cols).set_index(on)
+    ### Preprocess dataframe
+    if isinstance(df.index, pd.MultiIndex) | index:
+        df1 = df.reset_index().copy()
+    else:
+        df1 = df.copy()
 
-    comp_summ = pd.concat([old1, df1], axis=1, keys=['old', 'new'])
-    bool_summ = ((comp_summ['old'] != comp_summ['new']) & (comp_summ['new'].notnull() & comp_summ['new'].notnull())).any(axis=1)
-    if bool_summ.any():
-        new1 = comp_summ['new'].loc[bool_summ].reset_index()
+    where_dict1 = {c: df1[c].unique().tolist() for c in pk}
+
+    ### Get SQL table data
+    old1 = rd_sql(server, database, table, df1.columns.tolist(), where_col=where_dict1)
+
+    ## Make sure that only the relevant indexes are compared
+    old2 = pd.merge(old1, df1[pk], on=pk)
+
+    ### Compare old to new
+    comp_dict = compare_dfs(old2, df1, pk)
+    new1 = comp_dict['new']
+    diff1 = comp_dict['diff']
+
+    both1 = pd.concat([new1, diff1])
+
+    if not both1.empty:
         if isinstance(mod_date_col, str):
             run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-            new1[mod_date_col] = run_time_start
+            both1[mod_date_col] = run_time_start
+        update_table_rows(both1, server, database, table, append=append)
 
-        update_table_rows(new1, server, database, table, on=on, append=append)
-        return new1
-    else:
-        return pd.DataFrame(columns=on).set_index(on)
+    return both1
