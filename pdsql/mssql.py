@@ -383,7 +383,7 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
         The specific database within the server. e.g.: 'LowFlows'
     table : str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    on : None or list of str
+    on : None, str, or list of str
         The index by which the update should be applied on. If None, then it uses the existing primary key(s).
     index : bool
         Does the df have an index that corresponds to the SQL table primary keys?
@@ -400,8 +400,16 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
         pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
 
         if not pk:
-            raise ValueError('SQL table has no primary key. Please set one up.')
+            raise ValueError('SQL table has no primary key. Please set one up or assign "on" explicitly.')
         on = pk
+    elif isinstance(on, str):
+        on = [on]
+
+    ## Check that "on" are in the tables
+    df_bool = ~np.isin(on, df.columns).all()
+    if df_bool:
+        raise ValueError('"on" contains column names that are not in the df')
+
 
     ### Make the update statement
     temp_tab = '#temp_up1'
@@ -656,7 +664,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         The specific database within the server. e.g.: 'LowFlows'
     table : str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    on : None or list of str
+    on : None, str, or list of str
         The index by which the update should be applied on. If None, then it uses the existing primary key(s).
     index : bool
         Does the df have an index that corresponds to the SQL table primary keys?
@@ -676,9 +684,15 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
 
         if not pk:
-            raise ValueError('SQL table has no primary key. Please set one up.')
-    else:
-        pk = on
+            raise ValueError('SQL table has no primary key. Please set one up or assign "on" explicitly.')
+        on = pk
+    elif isinstance(on, str):
+        on = [on]
+
+    ## Check that "on" are in the tables
+    df_bool = ~np.isin(on, df.columns).all()
+    if df_bool:
+        raise ValueError('"on" contains column names that are not in the df')
 
     ### Preprocess dataframe
     if isinstance(df.index, pd.MultiIndex) | index:
