@@ -700,16 +700,16 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     else:
         df1 = df.copy()
 
-    where_dict1 = {c: df1[c].unique().tolist() for c in pk}
+    where_dict1 = {c: df1[c].unique().tolist() for c in on}
 
     ### Get SQL table data
     old1 = rd_sql(server, database, table, df1.columns.tolist(), where_col=where_dict1)
 
     ## Make sure that only the relevant indexes are compared
-    old2 = pd.merge(old1, df1[pk], on=pk)
+    old2 = pd.merge(old1, df1[on], on=on)
 
     ### Compare old to new
-    comp_dict = compare_dfs(old2, df1, pk)
+    comp_dict = compare_dfs(old2, df1, on)
     new1 = comp_dict['new']
     diff1 = comp_dict['diff']
 
