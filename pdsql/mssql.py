@@ -8,7 +8,7 @@ from datetime import datetime
 from pdsql.util import create_engine, get_pk_stmt, compare_dfs
 
 
-def rd_sql(server, database, table=None, col_names=None, where_col=None, where_val=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
+def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
     """
     Function to import data from an MSSQL database.
 
@@ -22,10 +22,8 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
     col_names : list of str
         The column names that should be retrieved. e.g.: ['SiteID', 'BandNo', 'RecordNo']
-    where_col : str or dict
-        Must be either a string with an associated where_val list or a dictionary of strings to lists.'. e.g.: 'SnapshotType' or {'SnapshotType': ['value1', 'value2']}
-    where_val : list
-        The WHERE query values for the where_col. e.g. ['value1', 'value2']
+    where_in : dict
+        A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str
         If where_col is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
     geo_col : bool
@@ -62,7 +60,7 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         else:
             col_stmt = '*'
 
-        where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
+        where_lst, where_temp = sql_where_stmts(where_in=where_in, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
         if isinstance(where_lst, list):
             stmt1 = "SELECT " + col_stmt + " FROM " + table + " where " + " and ".join(where_lst)
@@ -83,15 +81,28 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
             df.columns = rename_cols
     else:
         if con is None:
-            con = create_engine('mssql', server, database)
-        df = pd.read_sql(stmt1, con=con)
+            engine = create_engine('mssql', server, database)
+            with engine.begin() as conn:
+                if where_temp:
+                    for key, value in where_temp.items():
+                        df = pd.DataFrame(data=value, columns=[key])
+                        temp_tab = '#temp_'+key
+                        df.to_sql(temp_tab, con=conn, if_exists='replace', index=False, chunksize=1000)
+                df = pd.read_sql(stmt1, con=conn)
+        else:
+            if where_temp:
+                for key, value in where_temp.items():
+                    df = pd.DataFrame(data=value, columns=[key])
+                    temp_tab = '#temp_'+key
+                    df.to_sql(temp_tab, con=con, if_exists='replace', index=False, chunksize=1000)
+            df = pd.read_sql(stmt1, con=con)
         if rename_cols is not None:
             df.columns = rename_cols
 
     return df
 
 
-def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None, con=None):
+def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_in=None, where_op='AND', from_date=None, to_date=None, min_count=None, con=None):
     """
     Function to specifically read and possibly aggregate time series data stored in MSSQL tables.
 
@@ -117,10 +128,8 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
         The resampling function. i.e. mean, sum, count, min, or max. No median yet...
     val_round : int
         The number of decimals to round the values.
-    where_col : str or dict
-        Must be either a string with an associated where_val list or a dictionary of strings to lists.'. e.g.: 'SnapshotType' or {'SnapshotType': ['value1', 'value2']}
-    where_val : list
-        The WHERE query values for the where_col. e.g. ['value1', 'value2']
+    where_in : dict
+        A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str
         If where_col is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
     from_date : str
@@ -139,7 +148,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     """
 
     ## Create where statement
-    where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
+    where_lst, where_temp = sql_where_stmts(where_in=where_in, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
     ## Create ts statement and append earlier where statement
     if isinstance(groupby_cols, str):
@@ -168,11 +177,8 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
         if not up_sites:
             raise ValueError('min_count filtered out all sites.')
 
-        if isinstance(where_col, str):
-            where_col = {where_col: where_val}
-
-        where_col.update({groupby_cols[0]: up_sites})
-        where_lst = sql_where_stmts(where_col, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
+        where_in.update({groupby_cols[0]: up_sites})
+        where_lst, where_temp = sql_where_stmts(where_in, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
         ## Create sql stmt
         sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
@@ -304,7 +310,7 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
         raise err
 
 
-def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs):
+def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
     """
     Function to selectively delete rows from an mssql table.
 
@@ -317,11 +323,9 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
     table : str or None if stmt is a str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
     pk_df : DataFrame
-        A DataFrame of the primary keys of the table for the rows that should be removed. Will override anything in the kwargs.
+        A DataFrame of the primary keys of the table for the rows that should be removed.
     stmt : str
         SQL delete statement. Will override everything except server and database.
-    **kwargs
-        Any kwargs that can be passed to sql_where_stmts.
 
     Returns
     -------
@@ -333,7 +337,7 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
     """
 
     ### Make the delete statement
-    del_where_list = sql_where_stmts(**kwargs)
+#    del_where_list = sql_where_stmts(**kwargs)
     if isinstance(stmt, str):
         del_rows_stmt = stmt
     elif isinstance(pk_df, pd.DataFrame):
@@ -356,10 +360,10 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
         where_stmt = " where " + " and ".join(where_list)
         exists_stmt = "(" + sel_t1 + where_stmt + ")"
         del_rows_stmt = "DELETE FROM " + table + " where exists " + exists_stmt
-    elif isinstance(del_where_list, list):
-        del_rows_stmt = "DELETE FROM " + table + " WHERE " + " AND ".join(del_where_list)
-    elif del_where_list is None:
-        del_rows_stmt = "DELETE FROM " + table
+#    elif isinstance(del_where_list, list):
+#        del_rows_stmt = "DELETE FROM " + table + " WHERE " + " AND ".join(del_where_list)
+    else:
+        raise ValueError('Please specify pk_df or stmt')
 
     ### Delete rows
     engine = create_engine('mssql', server, database)
@@ -435,7 +439,7 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
         conn.execute(up_stmt)
 
 
-def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, date_col=None):
+def sql_where_stmts(where_in=None, where_op='AND', from_date=None, to_date=None, date_col=None):
     """
     Function to take various input parameters and convert them to a list of where statements for SQL.
 
@@ -443,8 +447,8 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
     ----------
     where_col : str or dict
         Either a str with an associated where_val list or a dictionary of string keys to list values. If a str, it should represent the table column associated with the 'where' condition.
-    where_val : list or None
-        If where_col is a str, then where_val must be a list of associated condition values.
+    where_in : dict
+        A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str of either 'AND' or 'OR'
         The binding operator for the where conditions.
     from_date : str or None
@@ -459,20 +463,18 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
     list of str or None
         Returns a list of str where conditions to be passed to an SQL execution function. The function needs to bind it with " where " + " and ".join(where_lst)
     """
+    ### Where stmts
+    where_stmt = []
+    temp_where = {}
 
-    if where_col is not None:
-        if isinstance(where_col, str) & isinstance(where_val, list):
-            #            if len(where_val) > 10000:
-            #                raise ValueError('The number of values in where_val cannot be over 10000 (or so). MSSQL limitation. Break them into smaller chunks.')
-            where_val = [str(i) for i in where_val]
-            where_stmt = [str(where_col) + ' IN (' + str(where_val)[1:-1] + ')']
-        elif isinstance(where_col, dict):
-            where_stmt = [i + " IN (" + str([str(j) for j in where_col[i]])[1:-1] + ")" for i in where_col]
-        else:
-            raise ValueError(
-                'where_col must be either a string with an associated where_val list or a dictionary of string keys to list values.')
-    else:
-        where_stmt = []
+    if isinstance(where_in, dict):
+        where_in_bool = {k: len(where_in[k]) > 20000 for k in where_in}
+        for key, value in where_in.items():
+            if where_in_bool[key]:
+                temp_where.update({key: value})
+                where_stmt.append("{key} IN (select {key} from {temp_tab})".format(key=key, temp_tab='#temp_'+key))
+            else:
+                where_stmt.append("{key} IN ({values})".format(key=key, values=str(value)[1:-1]))
 
     if isinstance(from_date, str):
         from_date1 = pd.to_datetime(from_date, errors='coerce')
@@ -498,7 +500,7 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
     where_lst = [i for i in where_stmt if len(i) > 0]
     if len(where_lst) == 0:
         where_lst = None
-    return where_lst
+    return where_lst, temp_where
 
 
 def sql_ts_agg_stmt(table, groupby_cols, date_col, values_cols, resample_code, period=1, fun='mean', val_round=3, where_lst=None):
@@ -591,14 +593,14 @@ def site_stat_stmt(table, site_col, values_col, fun):
     return stmt1
 
 
-def sql_del_rows_stmt(table, **kwargs):
-    """
-    Function to create an sql statement to delete rows based on where statements.
-    """
-
-    where_list = sql_where_stmts(**kwargs)
-    stmt1 = "DELETE FROM " + table + " WHERE " + " and ".join(where_list)
-    return stmt1
+#def sql_del_rows_stmt(table, **kwargs):
+#    """
+#    Function to create an sql statement to delete rows based on where statements.
+#    """
+#
+#    where_list = sql_where_stmts(**kwargs)
+#    stmt1 = "DELETE FROM " + table + " WHERE " + " and ".join(where_list)
+#    return stmt1
 
 
 def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
