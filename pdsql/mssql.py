@@ -68,6 +68,7 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
             stmt1 = "SELECT " + col_stmt + " FROM " + table
 
     elif isinstance(stmt, str):
+        where_temp = {}
         stmt1 = stmt
 
     else:

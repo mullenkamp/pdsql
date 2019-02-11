@@ -1,6 +1,6 @@
 {% set name = "pdsql" %}
-{% set version = "1.2.0" %}
-{% set sha256 = "2c7b70c81d4cc7d6866c2e8bbd71cbc0ea8246c0da546c15f8e3ba263ef628e6" %}
+{% set version = "1.2.1" %}
+{% set sha256 = "1639246ae13a87f9119342c809a34754e2c2d91f2d5cbe865a8109561c5b9a2a" %}
 
 # sha256 is the prefered checksum -- you can get it for a file with:
 #  `openssl sha256 <file name>`.
