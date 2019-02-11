@@ -86,8 +86,8 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
             with engine.begin() as conn:
                 if where_temp:
                     for key, value in where_temp.items():
-                        df = pd.DataFrame(data=value, columns=[key])
-                        temp_tab = '#temp_'+key
+                        df = pd.DataFrame(data=value, columns=[key.lower()])
+                        temp_tab = '#temp_'+key.lower()
                         df.to_sql(temp_tab, con=conn, if_exists='replace', index=False, chunksize=1000)
                 df = pd.read_sql(stmt1, con=conn)
         else:
@@ -473,9 +473,9 @@ def sql_where_stmts(where_in=None, where_op='AND', from_date=None, to_date=None,
         for key, value in where_in.items():
             if where_in_bool[key]:
                 temp_where.update({key: value})
-                where_stmt.append("{key} IN (select {key} from {temp_tab})".format(key=key, temp_tab='#temp_'+key))
+                where_stmt.append("{key} IN (select {key} from {temp_tab})".format(key=key, temp_tab='#temp_'+key.lower()))
             else:
-                where_stmt.append("{key} IN ({values})".format(key=key, values=str(value)[1:-1]))
+                where_stmt.append("{key} IN ({values})".format(key=key.lower(), values=str(value)[1:-1]))
 
     if isinstance(from_date, str):
         from_date1 = pd.to_datetime(from_date, errors='coerce')
