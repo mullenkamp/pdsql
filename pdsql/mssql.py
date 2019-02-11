@@ -25,7 +25,7 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
     where_in : dict
         A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str
-        If where_col is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
+        If where_in is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
     geo_col : bool
         Is there a geometry column in the table?.
     from_date : str
@@ -132,7 +132,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     where_in : dict
         A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str
-        If where_col is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
+        If where_in is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
     from_date : str
         The start date in the form '2010-01-01'.
     to_date : str
@@ -446,7 +446,7 @@ def sql_where_stmts(where_in=None, where_op='AND', from_date=None, to_date=None,
 
     Parameters
     ----------
-    where_col : str or dict
+    where_in : str or dict
         Either a str with an associated where_val list or a dictionary of string keys to list values. If a str, it should represent the table column associated with the 'where' condition.
     where_in : dict
         A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
@@ -706,7 +706,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     where_dict1 = {c: df1[c].unique().tolist() for c in on}
 
     ### Get SQL table data
-    old1 = rd_sql(server, database, table, df1.columns.tolist(), where_col=where_dict1)
+    old1 = rd_sql(server, database, table, df1.columns.tolist(), where_in=where_dict1)
 
     ## Make sure that only the relevant indexes are compared
     old2 = pd.merge(old1, df1[on], on=on)
