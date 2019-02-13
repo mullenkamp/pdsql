@@ -44,10 +44,10 @@ def compare_dfs(old_df, new_df, on):
     comp2[comp2.isnull()] = np.nan
 
     old_cols = on.copy()
-    old_cols2 = [c for c in comp2 if '_x' in c]
-    old_cols.extend(old_cols2)
+    old_cols_map = {c: c[:-2] for c in comp2 if '_x' in c}
+    old_cols.extend(old_cols_map.keys())
     old_set = comp2[old_cols].copy()
-    old_set.columns = all_cols
+    old_set.rename(columns=old_cols_map, inplace=True)
     new_set = comp2[all_cols].copy()
 
     comp_list = []

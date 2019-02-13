@@ -703,7 +703,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     if isinstance(df.index, pd.MultiIndex) | index:
         df1 = df.reset_index().copy()
     else:
-        df1 = df.copy()
+        df1 = df.reset_index(drop=True).copy()
 
     where_dict1 = {c: df1[c].unique().tolist() for c in on}
 
