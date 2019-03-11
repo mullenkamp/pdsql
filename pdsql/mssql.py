@@ -477,7 +477,7 @@ def sql_where_stmts(where_in=None, where_op='AND', from_date=None, to_date=None,
                 temp_where.update({key: value})
                 where_stmt.append("{key} IN (select {key} from {temp_tab})".format(key=key, temp_tab='#temp_'+key.lower()))
             else:
-                where_stmt.append("{key} IN ({values})".format(key=key.lower(), values=str(value)[1:-1]))
+                where_stmt.append("{key} IN ({values})".format(key=key, values=str(value)[1:-1]))
 
     if isinstance(from_date, str):
         from_date1 = pd.to_datetime(from_date, errors='coerce')
