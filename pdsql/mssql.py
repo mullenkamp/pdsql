@@ -7,6 +7,13 @@ import numpy as np
 from datetime import datetime
 from pdsql.util import create_engine, get_pk_stmt, compare_dfs
 
+try:
+    from geopandas import GeoDataFrame
+    from shapely.wkb import loads
+    from pycrs import parse
+except ImportError:
+    print('Install geopandas for reading geometery columns')
+
 
 def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
     """
@@ -628,9 +635,6 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     str
         The second output is a proj4 str of the projection system.
     """
-    from geopandas import GeoDataFrame
-    from shapely.wkt import loads
-    # from pycrs.parser import from_epsg_code
 
     ## Create connection to database
     engine = create_engine('mssql', server, database)
@@ -641,16 +645,17 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     geo_srid = int(pd.read_sql(geo_srid_stmt, engine).iloc[0, 0])
     if where_lst is not None:
         if len(where_lst) > 0:
-            stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table + " where " + " and ".join(where_lst)
+            stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table + " where " + " and ".join(where_lst)
         else:
-            stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
+            stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table
     else:
-        stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
+        stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table
     df2 = pd.read_sql(stmt2, engine)
-    geo = [loads(x) for x in df2.geometry]
+    df2['geometry'] = df2.geometry.apply(lambda x: loads(x))
 #    proj4 = from_epsg_code(geo_srid).to_proj4()
-    crs = {'init' :'epsg:' + str(geo_srid)}
-    geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=crs)
+#    crs = {'init' :'epsg:' + str(geo_srid)}
+    crs = parse.from_epsg_code(geo_srid).to_proj4()
+    geo_df = GeoDataFrame(df2, geometry='geometry', crs=crs)
 
     return geo_df
 

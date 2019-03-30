@@ -6,8 +6,12 @@ Created on Thu Apr  5 14:19:37 2018
 """
 import pandas as pd
 import numpy as np
-import pytest
-from pdsql.mssql import to_mssql, del_mssql_table_rows, rd_sql, create_engine
+#import pytest
+from pdsql import mssql
+from shapely import wkb
+import geopandas as gpd
+
+pd.options.display.max_columns = 10
 
 ##########################################
 ### Parameters
@@ -15,6 +19,12 @@ from pdsql.mssql import to_mssql, del_mssql_table_rows, rd_sql, create_engine
 server = 'sql2012dev01'
 database = 'Hydro'
 table = 'test_table1'
+
+server = 'SQL2012PROD05'
+database = 'GISPUBLIC'
+table = 'PLAN_NZTM_SURFACE_WATER_ALLOCATION_ZONES'
+col_names =  ['ZONE_GROUP_NAME', 'ZONE_NAME']
+geo_col = True
 
 df1 = pd.DataFrame([np.array([1, 1, 1, 2, 3, 4, 4, 4, 5, 5]), np.array([0, 1, 2, 0, 1, 0, 1, 2, 0, 1]), np.arange(10, 20)]).T
 df1.columns = ['pk1', 'pk2', 'val']
@@ -28,22 +38,22 @@ df2.columns = ['pk1', 'pk2']
 
 def test_del_rows():
     ## Write table
-    to_mssql(df1, server, database, table)
+    mssql.to_mssql(df1, server, database, table)
 
     ## Read table
-    beta1 = rd_sql(server, database, table)
+    beta1 = mssql.rd_sql(server, database, table)
 
     ## Delete parts
-    del_mssql_table_rows(server, database, table, pk_df=df2)
+    mssql.del_mssql_table_rows(server, database, table, pk_df=df2)
 
     ## Test
-    beta2 = rd_sql(server, database, table)
+    beta2 = mssql.rd_sql(server, database, table)
     beta3 = beta1.set_index(['pk1', 'pk2'])
     beta3.index.isin(df2.set_index(['pk1', 'pk2']).index)
     beta4 = beta3.loc[~beta3.index.isin(df2.set_index(['pk1', 'pk2']).index)].reset_index()
 
     ## Remove table
-    engine = create_engine('mssql', server, database)
+    engine = mssql.create_engine('mssql', server, database)
     conn = engine.connect()
     trans = conn.begin()
     conn.execute("IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL drop table " + table)
@@ -55,10 +65,14 @@ def test_del_rows():
 
 
 
+gpd1 = rd_sql_geo(gis_server, gis_database, table2, ', '.join(col_names))
 
+engine = mssql.create_engine('mssql', gis_server, gis_database)
+stmt1 = 'select ZONE_NAME, shape.STAsBinary() as geometry from ' + table2
+stmt2 = 'select ZONE_NAME, shape.STGeometryN(1).ToString() as geometry from ' + table2
 
+df2 = pd.read_sql(stmt1, engine)
+df2['geometry'] = df2.geometry.apply(lambda x: wkb.loads(x))
 
-
-
-
+gpd1 = gpd.GeoDataFrame(df2, geometry='geometry')
 
