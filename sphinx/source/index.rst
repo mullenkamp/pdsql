@@ -8,7 +8,7 @@ At the moment, the only supported SQL system is MSSQL, but other SQL systems can
 Installation
 ------------
 
-ETo can be installed via pip or conda::
+pdsql can be installed via pip or conda::
 
   pip install pdsql
 
@@ -18,9 +18,9 @@ or::
 
 The core dependency is `Pandas <http://pandas.pydata.org/pandas-docs/stable/>`_ and pyodbc.
 
-create_engine
---------------
-The create_engine function is used to create an appropriate database engine through Sqlalchemy to interact with SQL databases.
+.. create_engine
+.. --------------
+.. The create_engine function is used to create an appropriate database engine through Sqlalchemy to interact with SQL databases.
 
 .. toctree::
    :maxdepth: 2

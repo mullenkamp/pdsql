@@ -5,10 +5,17 @@ Functions for importing mssql data.
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from pdsql.util import create_engine, save_df
+from pdsql.util import create_engine, get_pk_stmt, compare_dfs
+
+try:
+    from geopandas import GeoDataFrame
+    from shapely.wkb import loads
+    from pycrs import parse
+except ImportError:
+    print('Install geopandas for reading geometery columns')
 
 
-def rd_sql(server, database, table=None, col_names=None, where_col=None, where_val=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, export_path=None):
+def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
     """
     Function to import data from an MSSQL database.
 
@@ -22,12 +29,10 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
     col_names : list of str
         The column names that should be retrieved. e.g.: ['SiteID', 'BandNo', 'RecordNo']
-    where_col : str or dict
-        Must be either a string with an associated where_val list or a dictionary of strings to lists.'. e.g.: 'SnapshotType' or {'SnapshotType': ['value1', 'value2']}
-    where_val : list
-        The WHERE query values for the where_col. e.g. ['value1', 'value2']
+    where_in : dict
+        A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str
-        If where_col is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
+        If where_in is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
     geo_col : bool
         Is there a geometry column in the table?.
     from_date : str
@@ -40,8 +45,8 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         List of strings to rename the resulting DataFrame column names.
     stmt : str
         Custom SQL statement to be directly passed to the database. This will ignore all prior arguments except server and database.
-    export_path : str
-        The export path for a csv file if desired. If None, then nothing is exported.
+    con : SQLAlchemy connectable (engine/connection) or database string URI
+        The sqlalchemy connection to be passed to pandas.read_sql
 
     Returns
     -------
@@ -62,8 +67,7 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
         else:
             col_stmt = '*'
 
-        where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date,
-                                    to_date=to_date, date_col=date_col)
+        where_lst, where_temp = sql_where_stmts(where_in=where_in, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
         if isinstance(where_lst, list):
             stmt1 = "SELECT " + col_stmt + " FROM " + table + " where " + " and ".join(where_lst)
@@ -71,6 +75,7 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
             stmt1 = "SELECT " + col_stmt + " FROM " + table
 
     elif isinstance(stmt, str):
+        where_temp = {}
         stmt1 = stmt
 
     else:
@@ -83,21 +88,29 @@ def rd_sql(server, database, table=None, col_names=None, where_col=None, where_v
             rename_cols.extend(['geometry'])
             df.columns = rename_cols
     else:
-        engine = create_engine('mssql', server, database)
-        df = pd.read_sql(stmt1, engine)
+        if con is None:
+            engine = create_engine('mssql', server, database)
+            with engine.begin() as conn:
+                if where_temp:
+                    for key, value in where_temp.items():
+                        df = pd.DataFrame(data=value, columns=[key.lower()])
+                        temp_tab = '#temp_'+key.lower()
+                        df.to_sql(temp_tab, con=conn, if_exists='replace', index=False, chunksize=1000)
+                df = pd.read_sql(stmt1, con=conn)
+        else:
+            if where_temp:
+                for key, value in where_temp.items():
+                    df = pd.DataFrame(data=value, columns=[key])
+                    temp_tab = '#temp_'+key
+                    df.to_sql(temp_tab, con=con, if_exists='replace', index=False, chunksize=1000)
+            df = pd.read_sql(stmt1, con=con)
         if rename_cols is not None:
             df.columns = rename_cols
-
-    ## save and return
-    if export_path is not None:
-        save_df(df, export_path, index=False)
 
     return df
 
 
-def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean',
-              val_round=3, where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, min_count=None,
-              export_path=None):
+def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_in=None, where_op='AND', from_date=None, to_date=None, min_count=None, con=None):
     """
     Function to specifically read and possibly aggregate time series data stored in MSSQL tables.
 
@@ -123,20 +136,18 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
         The resampling function. i.e. mean, sum, count, min, or max. No median yet...
     val_round : int
         The number of decimals to round the values.
-    where_col : str or dict
-        Must be either a string with an associated where_val list or a dictionary of strings to lists.'. e.g.: 'SnapshotType' or {'SnapshotType': ['value1', 'value2']}
-    where_val : list
-        The WHERE query values for the where_col. e.g. ['value1', 'value2']
+    where_in : dict
+        A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str
-        If where_col is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
+        If where_in is a dictionary and there are more than one key, then the operator that connects the where statements must be either 'AND' or 'OR'.
     from_date : str
         The start date in the form '2010-01-01'.
     to_date : str
         The end date in the form '2010-01-01'.
     min_count : int
         The minimum number of values required to return groupby_cols. Only works when groupby_cols and vlue_cols are str.
-    export_path : str
-        The export path for a csv file if desired. If None, then nothing is exported.
+    con : SQLAlchemy connectable (engine/connection) or database string URI
+        The sqlalchemy connection to be passed to pandas.read_sql
 
     Returns
     -------
@@ -145,8 +156,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     """
 
     ## Create where statement
-    where_lst = sql_where_stmts(where_col=where_col, where_val=where_val, where_op=where_op, from_date=from_date,
-                                to_date=to_date, date_col=date_col)
+    where_lst, where_temp = sql_where_stmts(where_in=where_in, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
     ## Create ts statement and append earlier where statement
     if isinstance(groupby_cols, str):
@@ -155,43 +165,34 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     col_stmt = ', '.join(col_names1)
 
     ## Create sql stmt
-    sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols,
-                                resample_code=resample_code, period=period, fun=fun, val_round=val_round,
-                                where_lst=where_lst)
+    sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
 
     ## Create connection to database
-    engine = create_engine('mssql', server, database)
+    if con is None:
+        con = create_engine('mssql', server, database)
 
     ## Make minimum count selection
     if (min_count is not None) & isinstance(min_count, int) & (len(groupby_cols) == 1):
         cols_count_str = ', '.join([groupby_cols[0], 'count(' + values_cols + ') as count'])
         if isinstance(where_lst, list):
-            stmt1 = "SELECT " + cols_count_str + " FROM " + "(" + sql_stmt1 + ") as agg" + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(
-                min_count)
+            stmt1 = "SELECT " + cols_count_str + " FROM " + "(" + sql_stmt1 + ") as agg" + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(min_count)
         else:
-            stmt1 = "SELECT " + cols_count_str + " FROM " + table + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(
-                min_count)
+            stmt1 = "SELECT " + cols_count_str + " FROM " + table + " GROUP BY " + col_stmt + " HAVING count(" + values_cols + ") >= " + str(min_count)
 
-        up_sites = pd.read_sql(stmt1, engine)[groupby_cols[0]].tolist()
+        up_sites = pd.read_sql(stmt1, con)[groupby_cols[0]].tolist()
         up_sites = [str(i) for i in up_sites]
 
         if not up_sites:
             raise ValueError('min_count filtered out all sites.')
 
-        if isinstance(where_col, str):
-            where_col = {where_col: where_val}
-
-        where_col.update({groupby_cols[0]: up_sites})
-        where_lst = sql_where_stmts(where_col, where_op=where_op, from_date=from_date, to_date=to_date,
-                                    date_col=date_col)
+        where_in.update({groupby_cols[0]: up_sites})
+        where_lst, where_temp = sql_where_stmts(where_in, where_op=where_op, from_date=from_date, to_date=to_date, date_col=date_col)
 
         ## Create sql stmt
-        sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols,
-                                    resample_code=resample_code, period=period, fun=fun, val_round=val_round,
-                                    where_lst=where_lst)
+        sql_stmt1 = sql_ts_agg_stmt(table, groupby_cols=groupby_cols, date_col=date_col, values_cols=values_cols, resample_code=resample_code, period=period, fun=fun, val_round=val_round, where_lst=where_lst)
 
     ## Create connection to database and execute sql statement
-    df = pd.read_sql(sql_stmt1, engine)
+    df = pd.read_sql(sql_stmt1, con)
 
     ## Check to see if any data was found
     if df.empty:
@@ -201,10 +202,6 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     df[date_col] = pd.to_datetime(df[date_col])
     groupby_cols.append(date_col)
     df1 = df.set_index(groupby_cols).sort_index()
-
-    ## Save and return
-    if export_path is not None:
-        save_df(df1, export_path)
 
     return df1
 
@@ -239,7 +236,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype)
 
 
-def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False):
+def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False, con=None):
     """
     Function to create a table in an mssql database.
 
@@ -267,8 +264,9 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
     None
     """
     ### Make connection
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
+    if con is None:
+        engine = create_engine('mssql', server, database)
+        con = engine.connect()
 
     ### Primary keys
     if isinstance(primary_keys, str):
@@ -291,17 +289,17 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
     d2 = ', '.join(d1)
     tab_create_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NULL create table " + table + " (" + d2 + pkey_stmt + fkey_stmt + ")"
 
-    trans = conn.begin()
+    trans = con.begin()
     try:
 
         ### Drop table option or check
         if drop_table:
             drop_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL DROP TABLE " + table
-            conn.execute(drop_stmt)
+            con.execute(drop_stmt)
         else:
             check_tab_stmt = "IF OBJECT_ID(" + str([str(table)])[1:-1] + ", 'U') IS NOT NULL SELECT COLUMN_NAME, DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=" +  str([str(table)])[1:-1]
 #            tab1 = read_sql(check_tab_stmt, conn)
-            conn.execute(check_tab_stmt)
+            con.execute(check_tab_stmt)
 #            list1 = [i for i in conn]
 #            if list1:
 #                print('Table already exists. Returning the table info.')
@@ -310,17 +308,17 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
 #                return df
 
         ### Create table in database
-        conn.execute(tab_create_stmt)
+        con.execute(tab_create_stmt)
         trans.commit()
-        conn.close()
+        con.close()
 
     except Exception as err:
         trans.rollback()
-        conn.close()
+        con.close()
         raise err
 
 
-def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs):
+def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
     """
     Function to selectively delete rows from an mssql table.
 
@@ -333,11 +331,9 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
     table : str or None if stmt is a str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
     pk_df : DataFrame
-        A DataFrame of the primary keys of the table for the rows that should be removed. Will override anything in the kwargs.
+        A DataFrame of the primary keys of the table for the rows that should be removed.
     stmt : str
         SQL delete statement. Will override everything except server and database.
-    **kwargs
-        Any kwargs that can be passed to sql_where_stmts.
 
     Returns
     -------
@@ -347,46 +343,47 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, **kwargs
     -----
     Using the pk_df is the only way to ensure that specific rows will be deleted from composite keys. The column data types and names of pk_df must match the equivelant columns in the SQL table. The procedure creates a temporary table from the pk_df then deletes the rows in the target table based on the temp table. Then finally deletes the temp table.
     """
-    ### Make connection
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
 
     ### Make the delete statement
-    del_where_list = sql_where_stmts(**kwargs)
+#    del_where_list = sql_where_stmts(**kwargs)
     if isinstance(stmt, str):
         del_rows_stmt = stmt
     elif isinstance(pk_df, pd.DataFrame):
-        to_mssql(pk_df, server, database, 'temp_pk_table')
-        sel_t1 = "select * from temp_pk_table"
+        temp_tab = '#temp_del_tab1'
+
+        ### Check the primary keys
+        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        pk = rd_sql(server, database, stmt=pk_stmt).name
+
+        if pk.empty:
+            raise ValueError('SQL table has no primary key. Please set one up.')
+        if not np.isin(pk, pk_df.columns.tolist()).all():
+            raise ValueError('The primary keys in the SQL table does not match up with the pk_df')
+
+        sel_t1 = "select * from " + temp_tab
         cols = pk_df.columns.tolist()
         tab_where = [table + '.' + i for i in cols]
-        t1_where = ['temp_pk_table.' + i for i in cols]
+        t1_where = [temp_tab + '.' + i for i in cols]
         where_list = [t1_where[i] + ' = ' + tab_where[i] for i in np.arange(len(cols))]
         where_stmt = " where " + " and ".join(where_list)
         exists_stmt = "(" + sel_t1 + where_stmt + ")"
         del_rows_stmt = "DELETE FROM " + table + " where exists " + exists_stmt
-    elif isinstance(del_where_list, list):
-        del_rows_stmt = "DELETE FROM " + table + " WHERE " + " AND ".join(del_where_list)
-    elif del_where_list is None:
-        del_rows_stmt = "DELETE FROM " + table
+#    elif isinstance(del_where_list, list):
+#        del_rows_stmt = "DELETE FROM " + table + " WHERE " + " AND ".join(del_where_list)
+    else:
+        raise ValueError('Please specify pk_df or stmt')
 
     ### Delete rows
-    trans = conn.begin()
-    try:
+    engine = create_engine('mssql', server, database)
+    with engine.begin() as conn:
+        if isinstance(pk_df, pd.DataFrame):
+            pk_df.to_sql(name=temp_tab, con=conn, if_exists='replace', chunksize=1000)
         conn.execute(del_rows_stmt)
-        conn.execute("IF OBJECT_ID('temp_pk_table', 'U') IS NOT NULL drop table temp_pk_table")
-        trans.commit()
-        conn.close()
-    except Exception as err:
-        conn.execute("IF OBJECT_ID('temp_pk_table', 'U') IS NOT NULL drop table temp_pk_table")
-        trans.rollback()
-        conn.close()
-        raise err
 
 
-def update_table_rows(df, server, database, table, on, append=True):
+def update_table_rows(df, server, database, table, on=None, index=False, append=True):
     """
-    Function to update rows from an mssql table.
+    Function to update rows from an mssql table. SQL table must have a primary key and the primary key must be in the input DataFrame.
 
     Parameters
     ----------
@@ -398,8 +395,10 @@ def update_table_rows(df, server, database, table, on, append=True):
         The specific database within the server. e.g.: 'LowFlows'
     table : str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    on : str or list
-        The columns for the df and sql table to join to to make the update.
+    on : None, str, or list of str
+        The index by which the update should be applied on. If None, then it uses the existing primary key(s).
+    index : bool
+        Does the df have an index that corresponds to the SQL table primary keys?
     append : bool
         Should new sites be appended to the table?
 
@@ -407,21 +406,25 @@ def update_table_rows(df, server, database, table, on, append=True):
     -------
     None
     """
-    ### Make connection
-    engine = create_engine('mssql', server, database)
-    conn = engine.connect()
+    ### Check the primary keys
+    if on is None:
+        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
 
-    ### Remove temp table if it exists
-    temp_tab = 'temp_up_table'
-    trans = conn.begin()
-    conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
-    trans.commit()
+        if not pk:
+            raise ValueError('SQL table has no primary key. Please set one up or assign "on" explicitly.')
+        on = pk
+    elif isinstance(on, str):
+        on = [on]
+
+    ## Check that "on" are in the tables
+    df_bool = ~np.isin(on, df.columns).all()
+    if df_bool:
+        raise ValueError('"on" contains column names that are not in the df')
+
 
     ### Make the update statement
-
-    to_mssql(df, server, database, temp_tab)
-    if isinstance(on, str):
-        on = [on]
+    temp_tab = '#temp_up1'
     on_tab = [table + '.' + i for i in on]
     on_temp = [temp_tab + '.' + i for i in on]
     cols = df.columns.tolist()
@@ -437,29 +440,23 @@ def update_table_rows(df, server, database, table, on, append=True):
     else:
         up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  ";"
 
-    ### Delete rows
-    trans = conn.begin()
-    try:
+    ### Run SQL code to update rows
+    engine = create_engine('mssql', server, database)
+    with engine.begin() as conn:
+        df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000)
         conn.execute(up_stmt)
-        conn.execute("IF OBJECT_ID('" + temp_tab + "', 'U') IS NOT NULL drop table " + temp_tab)
-        trans.commit()
-        conn.close()
-    except Exception as err:
-        trans.rollback()
-        conn.close()
-        raise err
 
 
-def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=None, to_date=None, date_col=None):
+def sql_where_stmts(where_in=None, where_op='AND', from_date=None, to_date=None, date_col=None):
     """
     Function to take various input parameters and convert them to a list of where statements for SQL.
 
     Parameters
     ----------
-    where_col : str or dict
+    where_in : str or dict
         Either a str with an associated where_val list or a dictionary of string keys to list values. If a str, it should represent the table column associated with the 'where' condition.
-    where_val : list or None
-        If where_col is a str, then where_val must be a list of associated condition values.
+    where_in : dict
+        A dictionary of strings to lists of strings.'. e.g.: {'SnapshotType': ['value1', 'value2']}
     where_op : str of either 'AND' or 'OR'
         The binding operator for the where conditions.
     from_date : str or None
@@ -474,20 +471,20 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
     list of str or None
         Returns a list of str where conditions to be passed to an SQL execution function. The function needs to bind it with " where " + " and ".join(where_lst)
     """
+    ### Where stmts
+    where_stmt = []
+    temp_where = {}
 
-    if where_col is not None:
-        if isinstance(where_col, str) & isinstance(where_val, list):
-            #            if len(where_val) > 10000:
-            #                raise ValueError('The number of values in where_val cannot be over 10000 (or so). MSSQL limitation. Break them into smaller chunks.')
-            where_val = [str(i) for i in where_val]
-            where_stmt = [str(where_col) + ' IN (' + str(where_val)[1:-1] + ')']
-        elif isinstance(where_col, dict):
-            where_stmt = [i + " IN (" + str([str(j) for j in where_col[i]])[1:-1] + ")" for i in where_col]
-        else:
-            raise ValueError(
-                'where_col must be either a string with an associated where_val list or a dictionary of string keys to list values.')
-    else:
-        where_stmt = []
+    if isinstance(where_in, dict):
+        where_in_bool = {k: len(where_in[k]) > 20000 for k in where_in}
+        for key, value in where_in.items():
+            if not isinstance(value, list):
+                raise ValueError('Values in the dict where_in must be lists.')
+            if where_in_bool[key]:
+                temp_where.update({key: value})
+                where_stmt.append("{key} IN (select {key} from {temp_tab})".format(key=key, temp_tab='#temp_'+key.lower()))
+            else:
+                where_stmt.append("{key} IN ({values})".format(key=key, values=str(value)[1:-1]))
 
     if isinstance(from_date, str):
         from_date1 = pd.to_datetime(from_date, errors='coerce')
@@ -513,7 +510,7 @@ def sql_where_stmts(where_col=None, where_val=None, where_op='AND', from_date=No
     where_lst = [i for i in where_stmt if len(i) > 0]
     if len(where_lst) == 0:
         where_lst = None
-    return where_lst
+    return where_lst, temp_where
 
 
 def sql_ts_agg_stmt(table, groupby_cols, date_col, values_cols, resample_code, period=1, fun='mean', val_round=3, where_lst=None):
@@ -544,7 +541,7 @@ def sql_ts_agg_stmt(table, groupby_cols, date_col, values_cols, resample_code, p
     Returns
     -------
     str
-        A full SQL statement that can be passed directly to an SQL connection driver like pymssql through pandas read_sql function.
+        A full SQL statement that can be passed directly to an SQL connection driver through pandas read_sql function.
     """
 
     if isinstance(groupby_cols, (str, list)):
@@ -606,14 +603,14 @@ def site_stat_stmt(table, site_col, values_col, fun):
     return stmt1
 
 
-def sql_del_rows_stmt(table, **kwargs):
-    """
-    Function to create an sql statement to delete rows based on where statements.
-    """
-
-    where_list = sql_where_stmts(**kwargs)
-    stmt1 = "DELETE FROM " + table + " WHERE " + " and ".join(where_list)
-    return stmt1
+#def sql_del_rows_stmt(table, **kwargs):
+#    """
+#    Function to create an sql statement to delete rows based on where statements.
+#    """
+#
+#    where_list = sql_where_stmts(**kwargs)
+#    stmt1 = "DELETE FROM " + table + " WHERE " + " and ".join(where_list)
+#    return stmt1
 
 
 def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
@@ -638,9 +635,6 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     str
         The second output is a proj4 str of the projection system.
     """
-    from geopandas import GeoDataFrame
-    from shapely.wkt import loads
-    # from pycrs.parser import from_epsg_code
 
     ## Create connection to database
     engine = create_engine('mssql', server, database)
@@ -651,21 +645,22 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     geo_srid = int(pd.read_sql(geo_srid_stmt, engine).iloc[0, 0])
     if where_lst is not None:
         if len(where_lst) > 0:
-            stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table + " where " + " and ".join(where_lst)
+            stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table + " where " + " and ".join(where_lst)
         else:
-            stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
+            stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table
     else:
-        stmt2 = "SELECT " + col_stmt + ", (" + geo_col + ".STGeometryN(1).ToString()) as geometry" + " FROM " + table
+        stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table
     df2 = pd.read_sql(stmt2, engine)
-    geo = [loads(x) for x in df2.geometry]
+    df2['geometry'] = df2.geometry.apply(lambda x: loads(x))
 #    proj4 = from_epsg_code(geo_srid).to_proj4()
-    crs = {'init' :'epsg:' + str(geo_srid)}
-    geo_df = GeoDataFrame(df2.drop('geometry', axis=1), geometry=geo, crs=crs)
+#    crs = {'init' :'epsg:' + str(geo_srid)}
+    crs = parse.from_epsg_code(geo_srid).to_proj4()
+    geo_df = GeoDataFrame(df2, geometry='geometry', crs=crs)
 
     return geo_df
 
 
-def update_from_difference(df, server, database, table, on, append=True, mod_date_col=False, **kwargs):
+def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False):
     """
     Function to update rows from an mssql table from the difference between a DataFrame and the existing SQL table.
 
@@ -679,38 +674,61 @@ def update_from_difference(df, server, database, table, on, append=True, mod_dat
         The specific database within the server. e.g.: 'LowFlows'
     table : str
         The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
-    on : str or list
-        The columns for the df and sql table to join to to make the update.
+    on : None, str, or list of str
+        The index by which the update should be applied on. If None, then it uses the existing primary key(s).
+    index : bool
+        Does the df have an index that corresponds to the SQL table primary keys?
     append : bool
         Should new sites be appended to the table?
     mod_date_col : str or None
         Name of the modification date column to be updated. None if it doesn't exist.
-    **kwargs
-        Other kwargs to be passed to rd_sql.
 
     Returns
     -------
     DataFrame
         Of the results that were updated in SQL.
     """
-    if isinstance(df.index, pd.MultiIndex):
-        df1 = df.copy()
+    ### Check the primary keys
+    if on is None:
+        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
+
+        if not pk:
+            raise ValueError('SQL table has no primary key. Please set one up or assign "on" explicitly.')
+        on = pk
+    elif isinstance(on, str):
+        on = [on]
+
+    ## Check that "on" are in the tables
+    df_bool = ~np.isin(on, df.columns).all()
+    if df_bool:
+        raise ValueError('"on" contains column names that are not in the df')
+
+    ### Preprocess dataframe
+    if isinstance(df.index, pd.MultiIndex) | index:
+        df1 = df.reset_index().copy()
     else:
-        df1 = df.set_index(on).copy()
-    all_cols = on[:]
-    all_cols.extend(df1.columns)
+        df1 = df.reset_index(drop=True).copy()
 
-    old1 = rd_sql(server, database, table, all_cols).set_index(on)
+    where_dict1 = {c: df1[c].unique().tolist() for c in on}
 
-    comp_summ = pd.concat([old1, df1], axis=1, keys=['old', 'new'])
-    bool_summ = ((comp_summ['old'] != comp_summ['new']) & (comp_summ['new'].notnull() & comp_summ['new'].notnull())).any(axis=1)
-    if bool_summ.any():
-        new1 = comp_summ['new'].loc[bool_summ].reset_index()
+    ### Get SQL table data
+    old1 = rd_sql(server, database, table, df1.columns.tolist(), where_in=where_dict1)
+
+    ## Make sure that only the relevant indexes are compared
+    old2 = pd.merge(old1, df1[on], on=on)
+
+    ### Compare old to new
+    comp_dict = compare_dfs(old2, df1, on)
+    new1 = comp_dict['new']
+    diff1 = comp_dict['diff']
+
+    both1 = pd.concat([new1, diff1])
+
+    if not both1.empty:
         if isinstance(mod_date_col, str):
             run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
-            new1[mod_date_col] = run_time_start
+            both1[mod_date_col] = run_time_start
+        update_table_rows(both1, server, database, table, append=append)
 
-        update_table_rows(new1, server, database, table, on=on, append=append)
-        return new1
-    else:
-        return pd.DataFrame(columns=on).set_index(on)
+    return both1
