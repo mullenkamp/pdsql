@@ -8,8 +8,8 @@ import pandas as pd
 import numpy as np
 #import pytest
 from pdsql import mssql
-from shapely import wkb
-import geopandas as gpd
+#from shapely import wkb
+#import geopandas as gpd
 
 pd.options.display.max_columns = 10
 
@@ -65,7 +65,7 @@ def test_del_rows():
 
 
 
-gpd1 = rd_sql_geo(gis_server, gis_database, table2, ', '.join(col_names))
+gpd1 = mssql.rd_sql_geo(server, database, table, ', '.join(col_names))
 
 engine = mssql.create_engine('mssql', gis_server, gis_database)
 stmt1 = 'select ZONE_NAME, shape.STAsBinary() as geometry from ' + table2
@@ -75,4 +75,8 @@ df2 = pd.read_sql(stmt1, engine)
 df2['geometry'] = df2.geometry.apply(lambda x: wkb.loads(x))
 
 gpd1 = gpd.GeoDataFrame(df2, geometry='geometry')
+beta1 = mssql.rd_sql(server, database, table, col_names, geo_col = True)
+
+
+
 
