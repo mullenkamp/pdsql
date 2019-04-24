@@ -85,8 +85,9 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
     if geo_col & (stmt is None):
         df = rd_sql_geo(server=server, database=database, table=table, col_stmt=col_stmt, where_lst=where_lst)
         if rename_cols is not None:
-            rename_cols.extend(['geometry'])
-            df.columns = rename_cols
+            rename_cols1 = rename_cols.copy()
+            rename_cols1.extend(['geometry'])
+            df.columns = rename_cols1
     else:
         if con is None:
             engine = create_engine('mssql', server, database)
