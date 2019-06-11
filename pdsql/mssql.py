@@ -444,7 +444,9 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
     ### Run SQL code to update rows
     engine = create_engine('mssql', server, database)
     with engine.begin() as conn:
+        print('Saving data to temp table...')
         df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000)
+        print('Updating primary table...')
         conn.execute(up_stmt)
 
 
@@ -711,15 +713,20 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     else:
         df1 = df.reset_index(drop=True).copy()
 
-    where_dict1 = {c: df1[c].unique().tolist() for c in on}
+    where_dict1 = {c: df1[c].unique().tolist() for c in on if len(df1[c].unique().tolist()) < 1000}
+
+    if not where_dict1:
+        where_dict1 = None
 
     ### Get SQL table data
+    print('Get existing data...')
     old1 = rd_sql(server, database, table, df1.columns.tolist(), where_in=where_dict1)
 
     ## Make sure that only the relevant indexes are compared
     old2 = pd.merge(old1, df1[on], on=on)
 
     ### Compare old to new
+    print('Compare existing to new data...')
     comp_dict = compare_dfs(old2, df1, on)
     new1 = comp_dict['new']
     diff1 = comp_dict['diff']
@@ -730,6 +737,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         if isinstance(mod_date_col, str):
             run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
             both1[mod_date_col] = run_time_start
+        print('New data found, updating tables...')
         update_table_rows(both1, server, database, table, on=on, append=append)
 
     return both1
