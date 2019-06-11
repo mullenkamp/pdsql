@@ -730,6 +730,6 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         if isinstance(mod_date_col, str):
             run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
             both1[mod_date_col] = run_time_start
-        update_table_rows(both1, server, database, table, append=append)
+        update_table_rows(both1, server, database, table, on=on, append=append)
 
     return both1
