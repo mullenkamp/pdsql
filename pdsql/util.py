@@ -52,7 +52,10 @@ def compare_dfs(old_df, new_df, on):
 
     comp_list = []
     for c in val_cols:
-        c1 = old_set[c] != new_set[c]
+        if old_set[c].dtype.name == 'float64':
+            c1 = ~np.isclose(old_set[c], new_set[c])
+        else:
+            c1 = old_set[c] != new_set[c]
         notnan1 = old_set[c].notnull() & new_set[c].notnull()
         c2 = c1 & notnan1
         comp_list.append(c2)
