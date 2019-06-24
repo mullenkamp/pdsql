@@ -207,7 +207,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     return df1
 
 
-def to_mssql(df, server, database, table, index=False, dtype=None):
+def to_mssql(df, server, database, table, index=False, dtype=None, schema=None):
     """
     Function to append a DataFrame onto an existing mssql table.
 
@@ -234,7 +234,7 @@ def to_mssql(df, server, database, table, index=False, dtype=None):
     engine = create_engine('mssql', server, database)
 
     ### Save to mssql table
-    df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype)
+    df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype, schema=schema)
 
 
 def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False, con=None):
