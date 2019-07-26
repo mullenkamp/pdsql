@@ -54,6 +54,9 @@ def compare_dfs(old_df, new_df, on):
     for c in val_cols:
         if old_set[c].dtype.name == 'float64':
             c1 = ~np.isclose(old_set[c], new_set[c])
+        elif old_set[c].dtype.name == 'object':
+            new_set[c] = new_set[c].astype(str)
+            c1 = old_set[c].astype(str) != new_set[c]
         else:
             c1 = old_set[c] != new_set[c]
         notnan1 = old_set[c].notnull() | new_set[c].notnull()
