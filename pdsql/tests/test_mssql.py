@@ -26,6 +26,10 @@ table = 'PLAN_NZTM_SURFACE_WATER_ALLOCATION_ZONES'
 col_names =  ['ZONE_GROUP_NAME', 'ZONE_NAME']
 geo_col = True
 
+server = 'edwdev01'
+database = 'PlanLimits'
+
+
 df1 = pd.DataFrame([np.array([1, 1, 1, 2, 3, 4, 4, 4, 5, 5]), np.array([0, 1, 2, 0, 1, 0, 1, 2, 0, 1]), np.arange(10, 20)]).T
 df1.columns = ['pk1', 'pk2', 'val']
 

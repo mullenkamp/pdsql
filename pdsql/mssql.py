@@ -2,6 +2,7 @@
 """
 Functions for importing mssql data.
 """
+import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
@@ -13,6 +14,19 @@ try:
     from pycrs import parse
 except ImportError:
     print('Install geopandas for reading geometery columns')
+
+###########################################
+### Parameters
+
+get_tables_stmt = "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE' AND TABLE_CATALOG='{dbName}'"
+
+geo_col_stmt = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='{table}' AND DATA_TYPE='geometry'"
+
+geo_srid_stmt = "select distinct {geo_col}.STSrid from {table}"
+
+
+###########################################
+### Functions
 
 
 def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
@@ -642,10 +656,10 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     ## Create connection to database
     engine = create_engine('mssql', server, database)
 
-    geo_col_stmt = "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME=" + "\'" + table + "\'" + " AND DATA_TYPE='geometry'"
-    geo_col = str(pd.read_sql(geo_col_stmt, engine).iloc[0, 0])
-    geo_srid_stmt = "select distinct " + geo_col + ".STSrid from " + table
-    geo_srid = int(pd.read_sql(geo_srid_stmt, engine).iloc[0, 0])
+    geo_col_stmt1 = geo_col_stmt.format(table=table)
+    geo_col = str(pd.read_sql(geo_col_stmt1, engine).iloc[0, 0])
+    geo_srid_stmt1 = geo_srid_stmt.format(geo_col=geo_col, table=table)
+    geo_srid = int(pd.read_sql(geo_srid_stmt1, engine).iloc[0, 0])
     if where_lst is not None:
         if len(where_lst) > 0:
             stmt2 = "SELECT " + col_stmt + ", " + geo_col + ".STAsBinary() as geometry" + " FROM " + table + " where " + " and ".join(where_lst)
@@ -741,3 +755,103 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         update_table_rows(both1, server, database, table, on=on, append=append)
 
     return both1
+
+
+def backup_db(server, database, tables=None, output_path=''):
+    """
+    Function to copy the tables in a database as individual parquet files.
+
+    Parameters
+    ----------
+    server : str
+        The server name. e.g.: 'SQL2012PROD03'
+    database : str
+        The specific database within the server. e.g.: 'LowFlows'
+    tables : list of str or None
+        The tables to be copied. If None, all tables will be copied.
+    output_path : str
+        The base path where the database tables will be saved. This function will create an additional folder with the database name.
+
+    Returns
+    -------
+    None
+
+    """
+    today1 = pd.Timestamp.today().strftime('%Y%m%dT%H%M')
+    file_format = '{table}_{date}.parquet'
+
+    ## Create connection to database
+    engine = create_engine('mssql', server, database)
+
+    ### Get table names
+    if not isinstance(tables, list):
+        get_tables_stmt1 = get_tables_stmt.format(dbName=database)
+        tables = rd_sql(server, database, stmt=get_tables_stmt1).TABLE_NAME.tolist()
+
+    ### Determine if any tables have geometry columns
+    str_columns = str(tables)[1:-1]
+    geo_col_stmt2 = "SELECT table_name, column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name in ({tables}) and DATA_TYPE='geometry'".format(tables=str_columns)
+
+    geo_tables = pd.read_sql(geo_col_stmt2, engine)
+
+    geo_table_list = geo_tables.table_name.unique().tolist()
+
+    str_geo = str(geo_table_list)[1:-1]
+
+    if not geo_tables.empty:
+        other_col_stmt = "SELECT table_name, column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE table_name in ({geo_tables}) and DATA_TYPE != 'geometry'".format(geo_tables=str_geo)
+        other_cols = pd.read_sql(other_col_stmt, engine)
+
+    ### Read and save all tables
+    save_path = os.path.join(output_path, database)
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    for t in tables:
+        print(t)
+        if t in geo_table_list:
+            cols = other_cols.loc[other_cols.table_name == t, 'column_name'].tolist()
+            data1 = rd_sql(server, database, t, cols)
+        else:
+            data1 = rd_sql(server, database, t)
+
+        data1.to_parquet(os.path.join(save_path,  file_format.format(table=t, date=today1)))
+
+    print('success')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
