@@ -29,7 +29,7 @@ geo_srid_stmt = "select distinct {geo_col}.STSrid from {table}"
 ### Functions
 
 
-def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None):
+def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op='AND', geo_col=False, from_date=None, to_date=None, date_col=None, rename_cols=None, stmt=None, con=None, username=None, password=None):
     """
     Function to import data from an MSSQL database.
 
@@ -104,7 +104,7 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
             df.columns = rename_cols1
     else:
         if con is None:
-            engine = create_engine('mssql', server, database)
+            engine = create_engine('mssql', server, database, username=username, password=password)
             with engine.begin() as conn:
                 if where_temp:
                     for key, value in where_temp.items():
@@ -816,7 +816,7 @@ def backup_db(server, database, tables=None, output_path=''):
         else:
             data1 = rd_sql(server, database, t)
 
-        data1.to_parquet(os.path.join(save_path,  file_format.format(table=t, date=today1)))
+        data1.to_parquet(os.path.join(save_path,  file_format.format(table=t, date=today1)), index=False)
 
     print('success')
 
