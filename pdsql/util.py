@@ -8,7 +8,8 @@ import os
 import sqlalchemy
 
 
-get_pk_stmt = "SELECT ORDINAL_POSITION AS [index], COLUMN_NAME AS name FROM {db}.INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = '{table}' AND CONSTRAINT_NAME LIKE 'PK%' order by [index]"
+get_pk_stmt = "SELECT ORDINAL_POSITION AS [index], COLUMN_NAME AS name FROM {db}.INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = '{table}' AND CONSTRAINT_NAME LIKE '%PK%' order by [index]"
+get_un_stmt = "SELECT ORDINAL_POSITION AS [index], COLUMN_NAME AS name FROM {db}.INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = '{table}' AND CONSTRAINT_NAME LIKE '%_UN' order by [index]"
 
 
 def compare_dfs(old_df, new_df, on):

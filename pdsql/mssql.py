@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import numpy as np
 from datetime import datetime
-from pdsql.util import create_engine, get_pk_stmt, compare_dfs
+from pdsql.util import create_engine, get_pk_stmt, compare_dfs, get_un_stmt
 
 try:
     from geopandas import GeoDataFrame
@@ -366,14 +366,17 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
     elif isinstance(pk_df, pd.DataFrame):
         temp_tab = '#temp_del_tab1'
 
-        ### Check the primary keys
+        ### Check the primary keys and unique keys
         pk_stmt = get_pk_stmt.format(db=database, table=table)
         pk = rd_sql(server, database, stmt=pk_stmt).name
 
+        un_stmt = get_un_stmt.format(db=database, table=table)
+        un = rd_sql(server, database, stmt=un_stmt).name
+
         if pk.empty:
             raise ValueError('SQL table has no primary key. Please set one up.')
-        if not np.isin(pk, pk_df.columns.tolist()).all():
-            raise ValueError('The primary keys in the SQL table does not match up with the pk_df')
+        if (not np.isin(pk, pk_df.columns.tolist()).all()) & (not np.isin(un, pk_df.columns.tolist()).all()):
+            raise ValueError('The primary or unique keys in the SQL table does not match up with the pk_df')
 
         sel_t1 = "select * from " + temp_tab
         cols = pk_df.columns.tolist()
@@ -677,7 +680,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     return geo_df
 
 
-def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False):
+def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False, remove_rows=False, where_cols=None):
     """
     Function to update rows from an mssql table from the difference between a DataFrame and the existing SQL table.
 
@@ -727,7 +730,10 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     else:
         df1 = df.reset_index(drop=True).copy()
 
-    where_dict1 = {c: df1[c].unique().tolist() for c in on if len(df1[c].unique().tolist()) < 1000}
+    if isinstance(where_cols, list):
+        where_dict1 = {c: df1[c].unique().tolist() for c in where_cols if len(df1[c].unique().tolist()) < 1000}
+    else:
+        where_dict1 = {c: df1[c].unique().tolist() for c in on if len(df1[c].unique().tolist()) < 1000}
 
     if not where_dict1:
         where_dict1 = None
@@ -737,13 +743,14 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     old1 = rd_sql(server, database, table, df1.columns.tolist(), where_in=where_dict1)
 
     ## Make sure that only the relevant indexes are compared
-    old2 = pd.merge(old1, df1[on], on=on)
+    old2 = pd.merge(old1, df1[on], on=on, how='outer')
 
     ### Compare old to new
     print('Compare existing to new data...')
     comp_dict = compare_dfs(old2, df1, on)
     new1 = comp_dict['new']
     diff1 = comp_dict['diff']
+    rem1 = comp_dict['remove'][on]
 
     both1 = pd.concat([new1, diff1])
 
@@ -754,7 +761,13 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         print('New data found, updating tables...')
         update_table_rows(both1, server, database, table, on=on, append=append)
 
-    return both1
+    if remove_rows:
+        if not rem1.empty:
+            del_table_rows(server, database, table, pk_df=rem1)
+
+        return both1, rem1
+
+    return both1, rem1
 
 
 def backup_db(server, database, tables=None, output_path=''):
