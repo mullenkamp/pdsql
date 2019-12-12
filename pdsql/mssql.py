@@ -367,10 +367,14 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
         temp_tab = '#temp_del_tab1'
 
         ### Check the primary keys and unique keys
-        pk_stmt = get_pk_stmt.format(db=database, table=table)
+        if '.' in table:
+            table1 = table.split('.')[1]
+        else:
+            table1 = table
+        pk_stmt = get_pk_stmt.format(db=database, table=table1)
         pk = rd_sql(server, database, stmt=pk_stmt).name
 
-        un_stmt = get_un_stmt.format(db=database, table=table)
+        un_stmt = get_un_stmt.format(db=database, table=table1)
         un = rd_sql(server, database, stmt=un_stmt).name
 
         if pk.empty:
