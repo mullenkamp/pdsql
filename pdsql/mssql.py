@@ -97,7 +97,7 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
 
     ## Create connection to database and execute sql statement
     if geo_col & (stmt is None):
-        df = rd_sql_geo(server=server, database=database, table=table, col_stmt=col_stmt, where_lst=where_lst)
+        df = rd_sql_geo(server=server, database=database, table=table, col_stmt=col_stmt, where_lst=where_lst, username=username, password=password)
         if rename_cols is not None:
             rename_cols1 = rename_cols.copy()
             rename_cols1.extend(['geometry'])
@@ -125,7 +125,7 @@ def rd_sql(server, database, table=None, col_names=None, where_in=None, where_op
     return df
 
 
-def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_in=None, where_op='AND', from_date=None, to_date=None, min_count=None, con=None):
+def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resample_code=None, period=1, fun='mean', val_round=3, where_in=None, where_op='AND', from_date=None, to_date=None, min_count=None, con=None, username=None, password=None):
     """
     Function to specifically read and possibly aggregate time series data stored in MSSQL tables.
 
@@ -184,7 +184,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
 
     ## Create connection to database
     if con is None:
-        con = create_engine('mssql', server, database)
+        con = create_engine('mssql', server, database, username=username, password=password)
 
     ## Make minimum count selection
     if (min_count is not None) & isinstance(min_count, int) & (len(groupby_cols) == 1):
@@ -221,7 +221,7 @@ def rd_sql_ts(server, database, table, groupby_cols, date_col, values_cols, resa
     return df1
 
 
-def to_mssql(df, server, database, table, index=False, dtype=None, schema=None):
+def to_mssql(df, server, database, table, index=False, dtype=None, schema=None, username=None, password=None):
     """
     Function to append a DataFrame onto an existing mssql table.
 
@@ -245,13 +245,13 @@ def to_mssql(df, server, database, table, index=False, dtype=None, schema=None):
     None
     """
     ### Prepare the engine
-    engine = create_engine('mssql', server, database)
+    engine = create_engine('mssql', server, database, username=username, password=password)
 
     ### Save to mssql table
     df.to_sql(name=table, con=engine, if_exists='append', chunksize=1000, index=index, dtype=dtype, schema=schema)
 
 
-def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False, con=None):
+def create_table(server, database, table, dtype_dict, primary_keys=None, foreign_keys=None, foreign_table=None, drop_table=False, con=None, username=None, password=None):
     """
     Function to create a table in an mssql database.
 
@@ -280,7 +280,7 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
     """
     ### Make connection
     if con is None:
-        engine = create_engine('mssql', server, database)
+        engine = create_engine('mssql', server, database, username=username, password=password)
         con = engine.connect()
 
     ### Primary keys
@@ -333,7 +333,7 @@ def create_table(server, database, table, dtype_dict, primary_keys=None, foreign
         raise err
 
 
-def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
+def del_table_rows(server, database, table=None, pk_df=None, stmt=None, username=None, password=None):
     """
     Function to selectively delete rows from an mssql table.
 
@@ -372,10 +372,10 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
         else:
             table1 = table
         pk_stmt = get_pk_stmt.format(db=database, table=table1)
-        pk = rd_sql(server, database, stmt=pk_stmt).name
+        pk = rd_sql(server, database, stmt=pk_stmt, username=username, password=password).name
 
         un_stmt = get_un_stmt.format(db=database, table=table1)
-        un = rd_sql(server, database, stmt=un_stmt).name
+        un = rd_sql(server, database, stmt=un_stmt, username=username, password=password).name
 
         if pk.empty:
             raise ValueError('SQL table has no primary key. Please set one up.')
@@ -396,14 +396,14 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None):
         raise ValueError('Please specify pk_df or stmt')
 
     ### Delete rows
-    engine = create_engine('mssql', server, database)
+    engine = create_engine('mssql', server, database, username=username, password=password)
     with engine.begin() as conn:
         if isinstance(pk_df, pd.DataFrame):
             pk_df.to_sql(name=temp_tab, con=conn, if_exists='replace', chunksize=1000)
         conn.execute(del_rows_stmt)
 
 
-def update_table_rows(df, server, database, table, on=None, index=False, append=True):
+def update_table_rows(df, server, database, table, on=None, index=False, append=True, username=None, password=None):
     """
     Function to update rows from an mssql table. SQL table must have a primary key and the primary key must be in the input DataFrame.
 
@@ -431,7 +431,7 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
     ### Check the primary keys
     if on is None:
         pk_stmt = get_pk_stmt.format(db=database, table=table)
-        pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
+        pk = rd_sql(server, database, stmt=pk_stmt, username=username, password=password).name.tolist()
 
         if not pk:
             raise ValueError('SQL table has no primary key. Please set one up or assign "on" explicitly.')
@@ -463,7 +463,7 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
         up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  ";"
 
     ### Run SQL code to update rows
-    engine = create_engine('mssql', server, database)
+    engine = create_engine('mssql', server, database, username=username, password=password)
     with engine.begin() as conn:
         print('Saving data to temp table...')
         df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000)
@@ -637,7 +637,7 @@ def site_stat_stmt(table, site_col, values_col, fun):
 #    return stmt1
 
 
-def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
+def rd_sql_geo(server, database, table, col_stmt, where_lst=None, username=None, password=None):
     """
     Function to extract the geometry and coordinate system from an SQL geometry field. Returns a shapely geometry object and a proj4 str.
 
@@ -661,7 +661,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     """
 
     ## Create connection to database
-    engine = create_engine('mssql', server, database)
+    engine = create_engine('mssql', server, database, username=username, password=password)
 
     geo_col_stmt1 = geo_col_stmt.format(table=table)
     geo_col = str(pd.read_sql(geo_col_stmt1, engine).iloc[0, 0])
@@ -684,7 +684,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None):
     return geo_df
 
 
-def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False, remove_rows=False, where_cols=None):
+def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False, remove_rows=False, where_cols=None, username=None, password=None):
     """
     Function to update rows from an mssql table from the difference between a DataFrame and the existing SQL table.
 
@@ -715,7 +715,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
     ### Check the primary keys
     if on is None:
         pk_stmt = get_pk_stmt.format(db=database, table=table)
-        pk = rd_sql(server, database, stmt=pk_stmt).name.tolist()
+        pk = rd_sql(server, database, stmt=pk_stmt, username=username, password=password).name.tolist()
 
         if not pk:
             raise ValueError('SQL table has no primary key. Please set one up or assign "on" explicitly.')
@@ -744,7 +744,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
 
     ### Get SQL table data
     print('Get existing data...')
-    old1 = rd_sql(server, database, table, df1.columns.tolist(), where_in=where_dict1)
+    old1 = rd_sql(server, database, table, df1.columns.tolist(), where_in=where_dict1, username=username, password=password)
 
     ## Make sure that only the relevant indexes are compared
     old2 = pd.merge(old1, df1[on], on=on, how='outer')
@@ -763,18 +763,18 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
             run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
             both1[mod_date_col] = run_time_start
         print('New data found, updating tables...')
-        update_table_rows(both1, server, database, table, on=on, append=append)
+        update_table_rows(both1, server, database, table, on=on, append=append, username=username, password=password)
 
     if remove_rows:
         if not rem1.empty:
-            del_table_rows(server, database, table, pk_df=rem1)
+            del_table_rows(server, database, table, pk_df=rem1, username=username, password=password)
 
         return both1, rem1
 
     return both1, rem1
 
 
-def backup_db(server, database, tables=None, output_path=''):
+def backup_db(server, database, tables=None, output_path='', username=None, password=None):
     """
     Function to copy the tables in a database as individual parquet files.
 
@@ -798,12 +798,12 @@ def backup_db(server, database, tables=None, output_path=''):
     file_format = '{table}_{date}.parquet'
 
     ## Create connection to database
-    engine = create_engine('mssql', server, database)
+    engine = create_engine('mssql', server, database, username=username, password=password)
 
     ### Get table names
     if not isinstance(tables, list):
         get_tables_stmt1 = get_tables_stmt.format(dbName=database)
-        tables = rd_sql(server, database, stmt=get_tables_stmt1).TABLE_NAME.tolist()
+        tables = rd_sql(server, database, stmt=get_tables_stmt1, username=username, password=password).TABLE_NAME.tolist()
 
     ### Determine if any tables have geometry columns
     str_columns = str(tables)[1:-1]
@@ -829,9 +829,9 @@ def backup_db(server, database, tables=None, output_path=''):
         print(t)
         if t in geo_table_list:
             cols = other_cols.loc[other_cols.table_name == t, 'column_name'].tolist()
-            data1 = rd_sql(server, database, t, cols)
+            data1 = rd_sql(server, database, t, cols, username=username, password=password)
         else:
-            data1 = rd_sql(server, database, t)
+            data1 = rd_sql(server, database, t, username=username, password=password)
 
         data1.to_parquet(os.path.join(save_path,  file_format.format(table=t, date=today1)), index=False)
 
