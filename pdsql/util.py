@@ -155,6 +155,23 @@ def create_engine(db_type, server, database, username=None, password=None):
     return engine
 
 
+def create_snowflake_engine(username, password, account, database, schema):
+    """
+
+    """
+
+    engine = sqlalchemy.create_engine(
+    'snowflake://{user}:{password}@{account}/{database}/{schema}'.format(
+        user=username,
+        password=password,
+        account=account,
+        database=database,
+        schema=schema
+    ))
+    return engine
+
+
+
 def save_df(df, path_str, index=True, header=True):
     """
     Function to save a dataframe based on the path_str extension. The path_str must  either end in csv or h5.
