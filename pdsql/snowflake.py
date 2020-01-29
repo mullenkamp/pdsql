@@ -77,7 +77,7 @@ def to_table(df, table, username, password, account, database, schema):
     engine = create_snowflake_engine(username, password, account, database, schema)
 
     ### Save to mssql table
-    df.to_sql(name=table, con=engine, if_exists='append', chunksize=5000, index=False)
+    df.to_sql(name=table, con=engine, if_exists='append', chunksize=5000, index=False, schema=schema)
 
 
 #def del_table_rows(username, password, account, database, schema, table=None, pk_df=None, stmt=None):
