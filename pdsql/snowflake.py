@@ -4,14 +4,16 @@ Created on Mon Jan 27 15:40:52 2020
 
 @author: MichaelEK
 """
+import os
 import numpy as np
 import pandas as pd
 from pdsql.util import create_snowflake_engine, get_pk_stmt, compare_dfs, get_un_stmt
+import snowflake.connector
 
 ####################################################
 
 
-def read_table(username, password, account, database, schema, stmt, con=None):
+def read_table(username, password, account, database, schema, stmt):
     """
     Function to import data from an MSSQL database.
 
@@ -29,8 +31,6 @@ def read_table(username, password, account, database, schema, stmt, con=None):
         The schema associated with the table to be read.
     stmt : str
         Custom SQL statement to be directly passed to the database and schema.
-    con : SQLAlchemy connectable (engine/connection) or database string URI
-        The sqlalchemy connection to be passed to pandas.read_sql
 
     Returns
     -------
@@ -38,17 +38,25 @@ def read_table(username, password, account, database, schema, stmt, con=None):
     """
 
     ## Create connection to database and execute sql statement
-    if con is None:
-        con = create_snowflake_engine(username, password, account, database, schema)
-    lst1 = []
-    for chunk in pd.read_sql_query(stmt, con, chunksize=50000):
-        lst1.append(chunk)
-    df1 = pd.concat(lst1)
+    ctx = snowflake.connector.connect(
+        user=username,
+        password=password,
+        account=account,
+        database=database,
+        schema=schema,
+        )
+    cs = ctx.cursor()
+    try:
+        cs.execute(stmt)
+        df1 = cs.fetch_pandas_all()
+    finally:
+        cs.close()
+        ctx.close()
 
     return df1
 
 
-def to_table(df, table, username, password, account, database, schema):
+def to_table(df, table, username, password, account, database, schema, if_exists='append'):
     """
     Function to append a DataFrame onto an existing mssql table.
 
@@ -68,6 +76,8 @@ def to_table(df, table, username, password, account, database, schema):
         The specific database within the server. e.g.: 'LowFlows'
     schema : str
         The schema associated with the table to be read.
+    if_exists : str
+        Options are 'fail', 'replace', or 'append'.
 
     Returns
     -------
@@ -77,7 +87,74 @@ def to_table(df, table, username, password, account, database, schema):
     engine = create_snowflake_engine(username, password, account, database, schema)
 
     ### Save to mssql table
-    df.to_sql(name=table, con=engine, if_exists='append', chunksize=5000, index=False)
+    df.to_sql(name=table, con=engine, schema=schema, if_exists=if_exists, chunksize=5000, index=False)
+
+
+#def to_table(df, table, username, password, account, database, schema, create=False, truncate=False):
+#    """
+#    Function to append a DataFrame onto an existing mssql table.
+#
+#    Parameters
+#    ----------
+#    df : DataFrame
+#        DataFrame to be saved. The DataFrame column/index names must match those on the mssql table exactly.
+#    table : str
+#        The specific table within the database. e.g.: 'LowFlowSiteRestrictionDaily'
+#    username : str
+#        The username
+#    password : str
+#        The password
+#    account : str
+#        account is the name assigned to your account by Snowflake. In the hostname you received from Snowflake (after your account was provisioned), your account name is the full/entire string to the left of snowflakecomputing.com
+#    database : str
+#        The specific database within the server. e.g.: 'LowFlows'
+#    schema : str
+#        The schema associated with the table to be read.
+#
+#    Returns
+#    -------
+#    None
+#    """
+#    today1 = pd.Timestamp.today().strftime('%Y%m%dT%H%M%S')
+#
+#    file_name = '{table}_{date}.csv'.format(table=table, date=today1)
+#    file_name = '{table}_{date}.parquet'.format(table=table, date=today1)
+#    file_path = os.path.abspath(file_name)
+##    df.to_csv(file_path, index=False, header=False)
+#    df.to_parquet(file_path, allow_truncated_timestamps=True)
+#
+#    engine = create_snowflake_engine(username, password, account, database, schema)
+#
+#    with engine.connect() as con:
+#
+#        if create:
+#            df.head(0).to_sql(name=table,
+#                              con=con,
+#                              if_exists="replace",
+#                              index=False)
+#
+#    ctx = snowflake.connector.connect(
+#        user=username,
+#        password=password,
+#        account=account,
+#        database=database,
+#        schema=schema,
+#        )
+#    cs = ctx.cursor()
+#    try:
+#        if truncate:
+#            cs.execute("truncate table {table}".format(table=table))
+#        cs.execute("put file://{file_path}* @%{table}".format(file_path=file_path, table=table))
+#        cs.execute("copy into {table} file_format = (type = parquet)".format(table=table))
+#    finally:
+#        cs.close()
+#        ctx.close()
+#
+#    if truncate:
+#        con.execute(f"truncate table {table}")
+#
+#    con.execute("put file://{file_path}* @%{table}".format(file_path=file_path, table=table))
+#    con.execute("copy into {table}".format(table=table))
 
 
 #def del_table_rows(username, password, account, database, schema, table=None, pk_df=None, stmt=None):
