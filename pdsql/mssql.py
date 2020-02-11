@@ -403,7 +403,7 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, username
         conn.execute(del_rows_stmt)
 
 
-def update_table_rows(df, server, database, table, on=None, index=False, append=True, username=None, password=None, geo_col=None, clear_table=False):
+def update_table_rows(df, server, database, table, on=None, index=False, append=True, username=None, password=None, geo_col=None, clear_table=False, dtype=None):
     """
     Function to update rows from an mssql table. SQL table must have a primary key and the primary key must be in the input DataFrame.
 
@@ -478,7 +478,7 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
     engine = create_engine('mssql', server, database, username=username, password=password)
     with engine.begin() as conn:
         print('Saving data to temp table...')
-        df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000)
+        df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000, dtype=dtype)
         if isinstance(geo_col, str):
             conn.execute(add_geo_column.format(table=temp_tab, sfield=geo_col))
             conn.execute(update_geo_stmt.format(table=temp_tab, sfield=geo_col, ofield=geo_col+'_'))
