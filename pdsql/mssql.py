@@ -403,14 +403,14 @@ def del_table_rows(server, database, table=None, pk_df=None, stmt=None, username
         conn.execute(del_rows_stmt)
 
 
-def update_table_rows(df, server, database, table, on=None, index=False, append=True, username=None, password=None):
+def update_table_rows(df, server, database, table, on=None, index=False, append=True, username=None, password=None, geo_col=None, clear_table=False):
     """
     Function to update rows from an mssql table. SQL table must have a primary key and the primary key must be in the input DataFrame.
 
     Parameters
     ----------
-    df : DataFrame
-        DataFrame with data to be overwritten in SQL table.
+    df : DataFrame or GeoDataFrame
+        DataFrame with the same column names in the destination SQL table. If df is a GeoDataFrame, then the geo_col parameter must be assigned a str.
     server : str
         The server name. e.g.: 'SQL2012PROD03'
     database : str
@@ -423,11 +423,19 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
         Does the df have an index that corresponds to the SQL table primary keys?
     append : bool
         Should new sites be appended to the table?
+    geo_col : str or None
+        If df is a geodataframe with a geometry column, then the name of that geometry column.
+    clear_table: bool
+        Should the destination table be cleared with a "delete from" statement before writing to it?
 
     Returns
     -------
     None
     """
+    add_geo_column = "alter table {table} add {sfield} geometry"
+    update_geo_stmt = "UPDATE {table} SET {sfield} = geometry::STGeomFromText({ofield}, 2193)"
+    drop_column = "alter table {table} drop column {ofield}"
+
     ### Check the primary keys
     if on is None:
         pk_stmt = get_pk_stmt.format(db=database, table=table)
@@ -443,7 +451,6 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
     df_bool = ~np.isin(on, df.columns).all()
     if df_bool:
         raise ValueError('"on" contains column names that are not in the df')
-
 
     ### Make the update statement
     temp_tab = '#temp_up1'
@@ -462,12 +469,23 @@ def update_table_rows(df, server, database, table, on=None, index=False, append=
     else:
         up_stmt = "merge " + table + " using " + temp_tab + " on (" + " and ".join(on_list) + ") when matched then update set " + ", ".join(up_list) +  ";"
 
+    ### Prepare geo column if necessary
+    if isinstance(geo_col, str):
+        df[geo_col + '_'] = df[geo_col].apply(lambda x: x.wkt)
+        df.drop(geo_col, axis=1, inplace=True)
+
     ### Run SQL code to update rows
     engine = create_engine('mssql', server, database, username=username, password=password)
     with engine.begin() as conn:
         print('Saving data to temp table...')
         df.to_sql(temp_tab, con=conn, if_exists='replace', index=index, chunksize=1000)
+        if isinstance(geo_col, str):
+            conn.execute(add_geo_column.format(table=temp_tab, sfield=geo_col))
+            conn.execute(update_geo_stmt.format(table=temp_tab, sfield=geo_col, ofield=geo_col+'_'))
+            conn.execute(drop_column.format(table=temp_tab, ofield=geo_col+'_'))
         print('Updating primary table...')
+        if clear_table:
+            conn.execute("delete from {table}".format(table=table))
         conn.execute(up_stmt)
 
 
@@ -684,7 +702,7 @@ def rd_sql_geo(server, database, table, col_stmt, where_lst=None, username=None,
     return geo_df
 
 
-def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False, remove_rows=False, where_cols=None, username=None, password=None):
+def update_from_difference(df, server, database, table, on=None, index=False, append=True, mod_date_col=False, remove_rows=False, where_cols=None, username=None, password=None, geo_col=None):
     """
     Function to update rows from an mssql table from the difference between a DataFrame and the existing SQL table.
 
@@ -706,6 +724,9 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
         Should new sites be appended to the table?
     mod_date_col : str or None
         Name of the modification date column to be updated. None if it doesn't exist.
+
+    geo_col : str or None
+        If df is a geodataframe with a geometry column, then the name of that geometry column.
 
     Returns
     -------
@@ -763,7 +784,7 @@ def update_from_difference(df, server, database, table, on=None, index=False, ap
             run_time_start = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
             both1[mod_date_col] = run_time_start
         print('New data found, updating tables...')
-        update_table_rows(both1, server, database, table, on=on, append=append, username=username, password=password)
+        update_table_rows(both1, server, database, table, on=on, append=append, username=username, password=password, geo_col=geo_col)
 
     if remove_rows:
         if not rem1.empty:
