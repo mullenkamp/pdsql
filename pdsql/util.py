@@ -42,7 +42,7 @@ def compare_dfs(old_df, new_df, on):
     rem1 = comp1.loc[comp1._merge == 'left_only', on].copy()
     add1 = comp1.loc[comp1._merge == 'right_only', all_cols].copy()
     comp2 = comp1[comp1._merge == 'both'].drop('_merge', axis=1).copy()
-    comp2[comp2.isnull()] = np.nan
+#    comp2[comp2.isnull()] = np.nan
 
     old_cols = on.copy()
     old_cols_map = {c: c[:-2] for c in comp2 if '_x' in c}
@@ -56,9 +56,15 @@ def compare_dfs(old_df, new_df, on):
         if old_set[c].dtype.name == 'float64':
             c1 = ~np.isclose(old_set[c], new_set[c])
         elif old_set[c].dtype.name == 'object':
+            new_set.loc[new_set[c].isnull(), c] = np.nan
             new_set[c] = new_set[c].astype(str)
             c1 = old_set[c].astype(str) != new_set[c]
+        elif old_set[c].dtype.name == 'geometry':
+            old1 = old_set[c].apply(lambda x: hash(x.wkt))
+            new1 = new_set[c].apply(lambda x: hash(x.wkt))
+            c1 = old1 != new1
         else:
+            new_set.loc[new_set[c].isnull(), c] = np.nan
             c1 = old_set[c] != new_set[c]
         notnan1 = old_set[c].notnull() | new_set[c].notnull()
         c2 = c1 & notnan1
