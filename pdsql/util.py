@@ -53,10 +53,12 @@ def compare_dfs(old_df, new_df, on):
 
     comp_list = []
     for c in val_cols:
+        isnull1 = new_set[c].isnull()
+        if isnull1.any():
+            new_set.loc[new_set[c].isnull(), c] = np.nan
         if old_set[c].dtype.name == 'float64':
             c1 = ~np.isclose(old_set[c], new_set[c])
         elif old_set[c].dtype.name == 'object':
-            new_set.loc[new_set[c].isnull(), c] = np.nan
             new_set[c] = new_set[c].astype(str)
             c1 = old_set[c].astype(str) != new_set[c]
         elif old_set[c].dtype.name == 'geometry':
@@ -64,7 +66,6 @@ def compare_dfs(old_df, new_df, on):
             new1 = new_set[c].apply(lambda x: hash(x.wkt))
             c1 = old1 != new1
         else:
-            new_set.loc[new_set[c].isnull(), c] = np.nan
             c1 = old_set[c] != new_set[c]
         notnan1 = old_set[c].notnull() | new_set[c].notnull()
         c2 = c1 & notnan1
