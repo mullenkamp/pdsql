@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import os
 import sqlalchemy
+import urllib
 
 
 get_pk_stmt = "SELECT ORDINAL_POSITION AS [index], COLUMN_NAME AS name FROM {db}.INFORMATION_SCHEMA.KEY_COLUMN_USAGE WHERE TABLE_NAME = '{table}' AND CONSTRAINT_NAME LIKE '%PK%' order by [index]"
@@ -103,46 +104,44 @@ def create_engine(db_type, server, database, username=None, password=None):
     -----
     If pymssql is installed, create_eng will use the package instead of pyodbc.
     """
+    base_url = "{driver};Trusted_Connection=yes;"
+    sd = "SERVER={server};DATABASE={db};".format(server=server, db=database)
+    base_url = base_url + sd
+
     if isinstance(username, str):
-        up = username
-        if isinstance(password, str):
-            up = up + ':' + password
-        up = up + '@'
-    else:
-        up = ''
+    	if not isinstance(password, str):
+    		raise ValueError('If username is defined, then the password must also be defined')
+    	up = "UID={user};PWD={password};".format(user=username, password=password)
+    	base_url = base_url + up
+
     if db_type == 'mssql':
         try:
             import pymssql
             eng_str = 'mssql+pymssql://' + up + server + '/' + database
             engine = sqlalchemy.create_engine(eng_str)
         except:
-            driver1 = '?driver=ODBC+Driver+17+for+SQL+Server'
-            eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
-            engine = sqlalchemy.create_engine(eng_str)
+            eng_str = urllib.parse.quote_plus(base_url.format(driver='DRIVER={ODBC Driver 17 for SQL Server}'))
+            engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(eng_str))
             try:
                 engine.connect()
             except:
-                driver1 = '?driver=ODBC+Driver+13.1+for+SQL+Server'
-                eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
-                engine = sqlalchemy.create_engine(eng_str)
+                eng_str = urllib.parse.quote_plus(base_url.format(driver='DRIVER={ODBC Driver 13.1 for SQL Server}'))
+                engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(eng_str))
                 try:
                     engine.connect()
                 except:
-                    driver1 = '?driver=ODBC+Driver+13+for+SQL+Server'
-                    eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver1
-                    engine = sqlalchemy.create_engine(eng_str)
+                    eng_str = urllib.parse.quote_plus(base_url.format(driver='DRIVER={ODBC Driver 13 for SQL Server}'))
+                    engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(eng_str))
                     try:
                         engine.connect()
                     except:
-                        driver2 = '?driver=ODBC+Driver+11+for+SQL+Server'
-                        eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
-                        engine = sqlalchemy.create_engine(eng_str)
+                        eng_str = urllib.parse.quote_plus(base_url.format(driver='DRIVER={ODBC Driver 11 for SQL Server}'))
+                        engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(eng_str))
                         try:
                             engine.connect()
                         except:
-                            driver2 = '?driver=SQL+Server+Native+Client+11.0'
-                            eng_str = 'mssql+pyodbc://' + up + server + '/' + database + driver2
-                            engine = sqlalchemy.create_engine(eng_str)
+                            eng_str = urllib.parse.quote_plus(base_url.format(driver='DRIVER={SQL Server}'))
+                            engine = sqlalchemy.create_engine("mssql+pyodbc:///?odbc_connect={}".format(eng_str))
                             try:
                                 engine.connect()
                             except:
