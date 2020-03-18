@@ -104,7 +104,7 @@ def create_engine(db_type, server, database, username=None, password=None):
     -----
     If pymssql is installed, create_eng will use the package instead of pyodbc.
     """
-    base_url = "{driver};Trusted_Connection=yes;"
+    base_url = "{driver};"
     sd = "SERVER={server};DATABASE={db};".format(server=server, db=database)
     base_url = base_url + sd
 
@@ -113,6 +113,8 @@ def create_engine(db_type, server, database, username=None, password=None):
     		raise ValueError('If username is defined, then the password must also be defined')
     	up = "UID={user};PWD={password};".format(user=username, password=password)
     	base_url = base_url + up
+    else:
+        base_url = base_url + "Trusted_Connection=yes;"
 
     if db_type == 'mssql':
         try:
